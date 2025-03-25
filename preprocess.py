@@ -8,6 +8,7 @@ Description: This script preprocesses CSV files for phyto and ozone node data.
 
 from datetime import datetime
 from rich.console import Console
+import numpy as np
 import os
 import pandas as pd
 import glob
@@ -101,15 +102,48 @@ def load_times(file: str) -> pd.DataFrame:
 
 def min_max_normalization(df: pd.DataFrame, column: str) -> None:
 
-    df[f"{column}_scaled"] = ((df[column] - CONFIG["MIN_VALUE"]) / (
+    df[column] = ((df[column] - CONFIG["MIN_VALUE"]) / (
         CONFIG["MAX_VALUE"] - CONFIG["MIN_VALUE"]) * CONFIG["FACTOR"]
     )
 
 
 def adjusted_min_max_normalization(df: pd.DataFrame, column: str) -> None:
 
-    df[f"{column}_scaled"] = (df[column] - (CONFIG["MIN_VALUE"]/CONFIG["FACTOR"])) / (
+    df[column] = (df[column] - (CONFIG["MIN_VALUE"]/CONFIG["FACTOR"])) / (
         (CONFIG["MAX_VALUE"]/CONFIG["FACTOR"]) - (CONFIG["MIN_VALUE"]/CONFIG["FACTOR"]))
+    
+
+def min_max_chunk(df: pd.DataFrame) -> None:
+    columns = ["differential_potential_pn1", "differential_potential_pn3"]
+    
+    def mm_chunk(chunk):
+        # Compute min and max for the list
+        chunk_min = min(chunk)
+        chunk_max = max(chunk)
+        if chunk_max != chunk_min:
+            # Normalize each element in the chunk
+            return [((x - chunk_min) / (chunk_max - chunk_min))*CONFIG["FACTOR"] if pd.notnull(x) else x for x in chunk]
+        else:
+            return [0.0 for x in chunk]
+
+    # Apply the normalization function to each cell in the specified columns.
+    for column in columns:
+        df[column] = df[column].apply(mm_chunk)
+
+
+def z_score_chunk(df: pd.DataFrame) -> None:
+    columns = ["differential_potential_pn1", "differential_potential_pn3"]
+    
+    def zs_chunk(chunk):
+        # Compute min and max for the list
+        chunk_mean = np.mean(chunk)
+        chunk_std = np.std(chunk)
+
+        return [((x - chunk_mean) / chunk_std)*CONFIG["FACTOR"] if pd.notnull(x) else x for x in chunk]
+
+    # Apply the normalization function to each cell in the specified columns.
+    for column in columns:
+        df[column] = df[column].apply(zs_chunk)
 
 
 def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> pd.DataFrame:
@@ -161,8 +195,8 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
                 'start_time': start_time,
                 'end_time': start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"]),
                 'channel': 0,
-                'chunk': chunk_ch0,
-                'Ozone': ozone
+                'ozone': ozone,
+                'chunk': chunk_ch0
             })
         
             # Create a row for the "after" slice (Ozone = 1)
@@ -170,8 +204,8 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
                 'start_time': start_time,
                 'end_time': start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"]),
                 'channel': 1,
-                'chunk': chunk_ch1,
-                'Ozone': ozone
+                'ozone': ozone,
+                'chunk': chunk_ch1
             })
 
             start_time = start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"])
@@ -179,6 +213,24 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
     df = pd.DataFrame(new_rows)
 
     return df
+
+def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
+
+    new_rows = []
+    samples_per_slice = CONFIG["CHUNK_SIZE"] * 60
+
+    for idx, row in df.iterrows():
+        new_row = {
+            'start_time': row["start_time"],
+            'end_time': row["end_time"],
+            'channel': row["channel"],
+            'ozone': row["ozone"]
+        }
+        new_row.update({f'val_{i}': row["chunk"][i] for i in range(samples_per_slice)})
+        new_rows.append(new_row)
+
+    return pd.DataFrame(new_rows)
+    
 
 
 def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulus_window: bool) -> None:
@@ -266,11 +318,13 @@ def main():
     # Argument parser
     # Add the normalizaiton option
     parser = argparse.ArgumentParser(description="Preprocess CSV files.")
-    parser.add_argument("--data-dir", required=True, help="Directory with raw files.")
+    parser.add_argument("--data-dir", required=True, type=str, help="Directory with raw files.")
+    parser.add_argument("--normalization", required=True, type=str, help="Directory with raw files.")
     args = parser.parse_args()
 
     # Normalize and validate inputs
     data_dir = args.data_dir
+    normalization = args.normalization
 
     # Print Input Parameters
     console.print(f"[bold green]Data Directory:[/bold green] {data_dir}")
@@ -294,25 +348,36 @@ def main():
     df_times = load_times(times_files[0])
 
     #plot_basic_data(df_phyto, df_times, False)
-    #plot_basic_data(df_phyto, df_times, True)
+    plot_basic_data(df_phyto, df_times, True)
 
-    # Optional: Min Max Normalization
-    # Optional: AMM
+    if normalization == "min-max":
+        min_max_normalization(df_phyto, "differential_potential_pn1")
+        min_max_normalization(df_phyto, "differential_potential_pn3")
+
+    if normalization == "adjusted-min-max":
+        adjusted_min_max_normalization(df_phyto, "differential_potential_pn1")
+        adjusted_min_max_normalization(df_phyto, "differential_potential_pn3")
 
     df_important_data = extract_important_data(df_phyto, df_times)
-    print
-    # Optional: Min Max 40 min
-    # Optional: Z-Score 40 min
+    
+    if normalization == "min-max-chunk":
+        min_max_chunk(df_important_data)
+
+    if normalization == "z-score-chunk":
+        # Optional: Z-Score 40 min
 
     plot_extracted_data(df_important_data)
 
     # split data in 10min chunks
     df_training_split = split_data_in_Xmin_chunks(df_important_data)
-    # extraploate training data to have a balanced set
 
-    # Optional Correct Z-Score
+    print(df_training_split.describe())
 
-    # 
+    if normalization == "z-score":
+        # Optional Correct Z-Score
+
+    df_final = split_chunks_in_columns(df_training_split)
+    path = get_precomputed_path(data_dir, "training_data.csv")
 
     
 
