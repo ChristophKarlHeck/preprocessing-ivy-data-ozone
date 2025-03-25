@@ -112,8 +112,8 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
 
     rows = []
     for start_time in df_times['times'][1:]:
-        start_time = start_time - pd.Timedelta(minutes=10)
-        end_time = start_time + pd.Timedelta(minutes=10)
+        start_time = start_time - pd.Timedelta(minutes=CONFIG["BEFORE"])
+        end_time = start_time + pd.Timedelta(minutes=CONFIG["AFTER"])
 
         subset = df_phyto.loc[start_time:end_time]
 
@@ -126,6 +126,46 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
     result_df = pd.DataFrame(rows)
     
     return result_df
+
+def split_data_in_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
+    "10 min training chunks"
+
+    chunk_seconds = 10 * 60
+    nbr_chunks = int(((CONFIG["BEFORE"]*60) + (CONFIG["AFTER"]*60))/chunk_seconds)
+    print(nbr_chunks)
+
+    new_rows = []
+
+    # Iterate over each row in result_df
+    for idx, row in df.iterrows():
+        event_time = row['time']
+        pn1_list = row['differential_potential_pn1']
+        pn3_list = row['differential_potential_pn3']
+
+        for i in range(nbr_chunks):
+            chunk_ch0 = pn1_list[i*chunk_seconds:(i+1)*chunk_seconds]
+            chunk_ch1 = pn3_list[i*chunk_seconds:(i+1)*chunk_seconds]
+
+            ozone = 0 if i < nbr_chunks/2 else 1 # First half 0, second half 1
+
+            new_rows.append({
+                'time': event_time,
+                'channel': 0,
+                'chunk': chunk_ch0,
+                'Ozone': ozone
+            })
+        
+            # Create a row for the "after" slice (Ozone = 1)
+            new_rows.append({
+                'time': event_time,
+                'channel': 1,
+                'chunk': chunk_ch1,
+                'Ozone': ozone
+            })
+
+    df = pd.DataFrame(new_rows)
+
+    return df
 
 
 def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
@@ -208,9 +248,23 @@ def main():
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
 
-    extract_important_data(df_phyto, df_times)
+    #plot_data(df_phyto, df_times)
 
-    plot_data(df_phyto, df_times)
+    # Optional: Min Max Normalization
+    # Optional: AMM
+
+    df_important_data = extract_important_data(df_phyto, df_times)
+
+    # Optional: Min Max 40 min
+    # Optional: Z-Score 40 min
+
+    # split data in training chunks
+    df_training_split = split_data_in_training_chunks(df_important_data)
+    # extraploate training data to have a balanced set
+
+    # Optional Correct Z-Score
+
+    
 
 
 
