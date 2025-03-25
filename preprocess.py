@@ -17,22 +17,20 @@ from typing import Optional
 
 # Constants
 CONFIG = {
-    "DATABITS": 8388608,
-    "VREF": 2.5,
-    "GAIN": 4.0,
-    "WINDOW_SIZE": 5,
     "RESAMPLE_RATE": "1s",
     "MIN_VALUE": -200,
     "MAX_VALUE": 200,
     "FACTOR": 1000,
+    "BEFORE": 20,
+    "AFTER": 20
 }
 
 # Initialize the console
 console = Console()
 
-def get_precomputed_path(data_dir: str):
+def get_precomputed_path(data_dir: str, name: str):
 
-    return os.path.join(data_dir, "precomputed_experiments.csv")
+    return os.path.join(data_dir, name)
 
 def discover_files(data_dir: str, prefix: str) -> list[str]:
     """
@@ -69,15 +67,16 @@ def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
         df = pd.concat(df_of_files)
         df.set_index("datetime", inplace=True)
         df = df.sort_index()
-        df = df.resample("1s").mean().interpolate()
+        df = df.resample(CONFIG["RESAMPLE_RATE"]).mean().interpolate()
         list_df.append(df)
 
     # Merge all DataFrames on 'datetime' by concatenating along columns
     combined_df = pd.concat(list_df, axis=1).reset_index()
     combined_df['datetime'] = pd.to_datetime(combined_df['datetime'], format="%Y-%m-%d %H:%M:%S")
+    combined_df.set_index("datetime", inplace=True, drop=False)
 
     # Write precomputed data to file
-    path = get_precomputed_path(data_dir)
+    path = get_precomputed_path(data_dir, "precomputed_experiments.csv")
     combined_df.to_csv(path, index=True)
 
     return combined_df
@@ -86,29 +85,50 @@ def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
 def load_times(file: str) -> pd.DataFrame:
 
     df = pd.read_csv(file)
-    df = pd.to_datetime(df['times'], format="%Y-%m-%d %H:%M:%S")
+    print(df.head())
+    df["times"] = pd.to_datetime(df['times'], format="%Y-%m-%d %H:%M:%S")
+    print(df.head())
 
     return df
 
 
-def scale_column(df: pd.DataFrame, column: str) -> None:
-    """
-    Scale a column using min-max scaling.
-    Args:
-        df (pd.DataFrame): DataFrame containing the column.
-        column (str): Column to scale.
-    """
-    console.print(f"[bold magenta]Scaling column '{column}' using Min-Max Scaling...[/bold magenta]")
+def min_max_normalization(df: pd.DataFrame, column: str) -> None:
+
     df[f"{column}_scaled"] = ((df[column] - CONFIG["MIN_VALUE"]) / (
         CONFIG["MAX_VALUE"] - CONFIG["MIN_VALUE"]) * CONFIG["FACTOR"]
     )
 
 
-def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
+def adjusted_min_max_normalization(df: pd.DataFrame, column: str) -> None:
 
-    # Define the time delta (in minutes)
-    before = 30
-    after = 30
+    df[f"{column}_scaled"] = (df[column] - (CONFIG["MIN_VALUE"]/CONFIG["FACTOR"])) / (
+        (CONFIG["MAX_VALUE"]/CONFIG["FACTOR"]) - (CONFIG["MIN_VALUE"]/CONFIG["FACTOR"]))
+
+
+def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> pd.DataFrame:
+    """
+    Important data equals x min before and x min after stimulus
+    """
+
+    rows = []
+    for start_time in df_times['times'][1:]:
+        start_time = start_time - pd.Timedelta(minutes=10)
+        end_time = start_time + pd.Timedelta(minutes=10)
+
+        subset = df_phyto.loc[start_time:end_time]
+
+        rows.append({
+        'time': start_time,
+        'differential_potential_pn1': subset['differential_potential_pn1'].tolist(),
+        'differential_potential_pn3': subset['differential_potential_pn3'].tolist()
+    })
+        
+    result_df = pd.DataFrame(rows)
+    
+    return result_df
+
+
+def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
 
     # Create subplots
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 8), sharex=True)
@@ -126,10 +146,11 @@ def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
         axes[i].legend()
 
         # Loop through each event in df_times to mark the area around each event
-        # for start_time in df_times['times']:
-        #     axes[i].axvspan(start_time - pd.Timedelta(minutes=before),
-        #                     start_time + pd.Timedelta(minutes=after),
-        #                     color='blue', alpha=0.2)
+        for start_time in df_times['times']:
+            axes[i].axvline(start_time, color='blue', linestyle='--', linewidth=1.5)
+            axes[i].axvspan(start_time - pd.Timedelta(minutes=CONFIG["BEFORE"]),
+                            start_time + pd.Timedelta(minutes=CONFIG["AFTER"]),
+                            color='blue', alpha=0.2)
 
     # Set common x-label
     plt.xlabel("Datetime")
@@ -174,10 +195,11 @@ def main():
 
     # Process Phyto Node 
     df_phyto = None
-    path = get_precomputed_path(data_dir)
+    path = get_precomputed_path(data_dir, "precomputed_experiments.csv")
     if os.path.exists(path):
         df_phyto = pd.read_csv(path)
         df_phyto['datetime'] = pd.to_datetime(df_phyto['datetime'], format="%Y-%m-%d %H:%M:%S")
+        df_phyto.set_index("datetime", inplace=True, drop=False)
     else:
         phyto_files = discover_files(data_dir, "experiment")
         df_phyto = load_and_merge_data(data_dir, phyto_files)
@@ -185,6 +207,8 @@ def main():
     # Read Ozone times file
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
+
+    extract_important_data(df_phyto, df_times)
 
     plot_data(df_phyto, df_times)
 
