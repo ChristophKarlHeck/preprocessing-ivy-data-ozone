@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Debug Script",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/preprocess.py",
+            "console": "integratedTerminal",
+            "args": ["--data-dir", "/home/chris/experiment_data/ozone_cut/ozone_cut/Exp44_Ivy2"],
+            "justMyCode": true
+        }
+    ]
+}

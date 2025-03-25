@@ -1,6 +1,6 @@
 """
 Author: Christoph Karl Heck
-Date: 2025-03-11
+Date: 2025-03-25
 Description: This script preprocesses CSV files for phyto and ozone node data. 
              It includes data filtering, resampling, smoothing, scaling, and visualization.
              The output includes preprocessed CSV files and visual plots.
@@ -30,6 +30,9 @@ CONFIG = {
 # Initialize the console
 console = Console()
 
+def get_precomputed_path(data_dir: str):
+
+    return os.path.join(data_dir, "precomputed_experiments.csv")
 
 def discover_files(data_dir: str, prefix: str) -> list[str]:
     """
@@ -42,12 +45,11 @@ def discover_files(data_dir: str, prefix: str) -> list[str]:
     """
     console.print(f"[bold cyan]Discovering files with prefix '{prefix}' in '{data_dir}'[/bold cyan]")
     files = glob.glob(os.path.join(data_dir, f"{prefix}*.csv"))
-    print(data_dir, files)
     console.print(f"Found [bold yellow]{len(files)}[/bold yellow] matching files.")
     return files
 
 
-def load_and_merge_data(data_dir:str, files) -> pd.DataFrame:
+def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
     columns = ["differential_potential_pn1", "differential_potential_pn3", "O3_1", "O3_2"]
     combined_df = None  # Start with an empty DataFrame
     list_df=[]
@@ -62,71 +64,31 @@ def load_and_merge_data(data_dir:str, files) -> pd.DataFrame:
             df_f = df_f.dropna()
             df_f = df_f.drop_duplicates(subset=["datetime"])
             df_of_files.append(df_f)
-            print(file)
         
         
         df = pd.concat(df_of_files)
-        df['datetime'] = pd.to_datetime(df['datetime'], format="%Y-%m-%d %H:%M:%S.%f")
-        print(df.head())
         df.set_index("datetime", inplace=True)
         df = df.sort_index()
         df = df.resample("1s").mean().interpolate()
         list_df.append(df)
 
     # Merge all DataFrames on 'datetime' by concatenating along columns
-    combined_df = pd.concat(list_df, axis=1)
-
-    # Print final DataFrame statistics
-    print(combined_df.head())
-    print(combined_df.describe())
+    combined_df = pd.concat(list_df, axis=1).reset_index()
+    combined_df['datetime'] = pd.to_datetime(combined_df['datetime'], format="%Y-%m-%d %H:%M:%S")
 
     # Write precomputed data to file
-    path = os.path.join(data_dir, "precomputed_experiments.csv")
+    path = get_precomputed_path(data_dir)
     combined_df.to_csv(path, index=True)
 
     return combined_df
 
-def load_times(file) -> pd.DataFrame:
+
+def load_times(file: str) -> pd.DataFrame:
 
     df = pd.read_csv(file)
     df = pd.to_datetime(df['times'], format="%Y-%m-%d %H:%M:%S")
 
     return df
-
-
-def partition_data_frames(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Load and combine multiple CSV files into a single DataFrame.
-    Args:
-        files (list[str]): List of file paths.
-    Returns:
-        pd.DataFrame: Combined DataFrame.
-    """
-    console.print("[bold green]Loading and combining CSV files into a single DataFrame...[/bold green]")
-    return pd.concat([pd.read_csv(file) for file in files], ignore_index=True)
-
-
-def preprocess_data(df: pd.DataFrame, from_date: str, until_date: str) -> pd.DataFrame:
-    """
-    Preprocess the data: filter by date, resample, and smooth.
-    Args:
-        df (pd.DataFrame): Input DataFrame.
-        from_date (str): Date to filter rows before.
-    Returns:
-        pd.DataFrame: Preprocessed DataFrame.
-    """
-    console.print("[bold yellow]Preprocessing data: filtering and resampling...[/bold yellow]")
-
-    # Add dates to CONFIG
-    CONFIG["FROM_DATE"] = from_date
-    CONFIG["UNTIL_DATE"] = until_date
-
-    df = df.dropna(subset=["datetime"])
-    df.set_index("datetime", inplace=True)
-    df = df[df.index >= from_date]
-    df = df[df.index < until_date]
-    df_resampled = df.resample(CONFIG["RESAMPLE_RATE"]).mean().interpolate()
-    return df_resampled
 
 
 def scale_column(df: pd.DataFrame, column: str) -> None:
@@ -140,22 +102,6 @@ def scale_column(df: pd.DataFrame, column: str) -> None:
     df[f"{column}_scaled"] = ((df[column] - CONFIG["MIN_VALUE"]) / (
         CONFIG["MAX_VALUE"] - CONFIG["MIN_VALUE"]) * CONFIG["FACTOR"]
     )
-
-def z_score_column(df: pd.DataFrame, column: str) -> None:
-    """
-    Scale a column using Z-score normalization (standardization).
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing the column.
-        column (str): Column to scale.
-    """
-    console.print(f"[bold cyan]Scaling column '{column}' using Z-Score Normalization...[/bold cyan]")
-
-    mean = df[column].mean()
-    std = df[column].std()
-
-    # Apply Z-score formula
-    df[f"{column}_scaled"] = ((df[column] - mean) / std) * CONFIG["FACTOR"]
 
 
 def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
@@ -174,7 +120,7 @@ def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
     titles = ["Differential Potential Leaf", "Differential Potential Stem", "O3_1", "O3_2"]
 
     for i, col in enumerate(columns):
-        axes[i].plot(df_phyto.index, df_phyto[col], label=col, linewidth=1)
+        axes[i].plot(df_phyto["datetime"], df_phyto[col], label=col, linewidth=1)
         axes[i].set_title(titles[i])
         axes[i].grid(True)
         axes[i].legend()
@@ -227,12 +173,18 @@ def main():
     console.print(f"[bold green]Data Directory:[/bold green] {data_dir}")
 
     # Process Phyto Node 
-    phyto_files = discover_files(data_dir, "experiment")
-    df_phyto = load_and_merge_data(phyto_files)
+    df_phyto = None
+    path = get_precomputed_path(data_dir)
+    if os.path.exists(path):
+        df_phyto = pd.read_csv(path)
+        df_phyto['datetime'] = pd.to_datetime(df_phyto['datetime'], format="%Y-%m-%d %H:%M:%S")
+    else:
+        phyto_files = discover_files(data_dir, "experiment")
+        df_phyto = load_and_merge_data(data_dir, phyto_files)
 
     # Read Ozone times file
     times_files = discover_files(data_dir, "times")
-    df_times = pd.load_times(times_files[0])
+    df_times = load_times(times_files[0])
 
     plot_data(df_phyto, df_times)
 
