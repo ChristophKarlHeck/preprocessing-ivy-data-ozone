@@ -17,12 +17,15 @@ from typing import Optional
 
 # Constants
 CONFIG = {
+    "DATABITS": 8388608,
+    "VREF": 2.5,
+    "GAIN": 4.0,
     "RESAMPLE_RATE": "1s",
     "MIN_VALUE": -200,
     "MAX_VALUE": 200,
-    "FACTOR": 1000,
-    "BEFORE": 20,
-    "AFTER": 20,
+    "FACTOR": 1000, # not get numerical differention
+    "BEFORE": 20, # minutes before stimulus
+    "AFTER": 20, # minutes after stimulus
     "CHUNK_SIZE": 10 #min
 }
 
@@ -82,6 +85,11 @@ def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
 
     return combined_df
 
+def convert_to_mv(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    
+    df[column] = ((df[column] / CONFIG["DATABITS"] - 1) * CONFIG["VREF"] / CONFIG["GAIN"]) * 1000
+
+    return df
 
 def load_times(file: str) -> pd.DataFrame:
 
@@ -110,14 +118,16 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
     """
 
     rows = []
-    for start_time in df_times['times'][1:]:
-        start_time = start_time - pd.Timedelta(minutes=CONFIG["BEFORE"])
-        end_time = start_time + pd.Timedelta(minutes=CONFIG["AFTER"])
+    for stimulus_time in df_times['times'][1:]:
+        start_time = stimulus_time - pd.Timedelta(minutes=CONFIG["BEFORE"])
+        end_time = stimulus_time + pd.Timedelta(minutes=CONFIG["AFTER"])
 
         subset = df_phyto.loc[start_time:end_time]
 
         rows.append({
-        'time': start_time,
+        'start_time': start_time,
+        'stimulus_time': stimulus_time,
+        'end_time': end_time,
         'differential_potential_pn1': subset['differential_potential_pn1'].tolist(),
         'differential_potential_pn3': subset['differential_potential_pn3'].tolist()
     })
@@ -126,18 +136,18 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
     
     return result_df
 
-def split_data_in_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
-    "10 min training chunks"
+def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
+    "X min training chunks"
 
     chunk_seconds = CONFIG["CHUNK_SIZE"] * 60
     nbr_chunks = int(((CONFIG["BEFORE"]*60) + (CONFIG["AFTER"]*60))/chunk_seconds)
-    print(nbr_chunks)
 
     new_rows = []
 
     # Iterate over each row in result_df
     for idx, row in df.iterrows():
-        event_time = row['time']
+        start_time = row['start_time']
+        stimulus_time = row['stimulus_time']
         pn1_list = row['differential_potential_pn1']
         pn3_list = row['differential_potential_pn3']
 
@@ -148,7 +158,8 @@ def split_data_in_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
             ozone = 0 if i < nbr_chunks/2 else 1 # First half 0, second half 1
 
             new_rows.append({
-                'time': event_time,
+                'start_time': start_time,
+                'end_time': start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"]),
                 'channel': 0,
                 'chunk': chunk_ch0,
                 'Ozone': ozone
@@ -156,11 +167,14 @@ def split_data_in_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
         
             # Create a row for the "after" slice (Ozone = 1)
             new_rows.append({
-                'time': event_time,
+                'start_time': start_time,
+                'end_time': start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"]),
                 'channel': 1,
                 'chunk': chunk_ch1,
                 'Ozone': ozone
             })
+
+            start_time = start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"])
 
     df = pd.DataFrame(new_rows)
 
@@ -175,14 +189,21 @@ def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulu
     # Plot each column in a separate subplot
     # relevant sind differential_potential_pn1 (leaf), differnetial_potential_pn3 (stem), O3_1 und O3_2 die zwei ozon
     # sensoren (aber ich weiß nicht welcher oben und welcher unten ist)
-    columns = ["differential_potential_pn1", "differential_potential_pn3", "O3_1", "O3_2"]
-    titles = ["Differential Potential Leaf", "Differential Potential Stem", "O3_1", "O3_2"]
+    plot_info = [
+        {"col": "differential_potential_pn1", "title": "Differential Potential Leaf", "ylabel": "[mv]"},
+        {"col": "differential_potential_pn3", "title": "Differential Potential Stem", "ylabel": "[mv]"},
+        {"col": "O3_1", "title": "O3_1", "ylabel": "[ppb]"},
+        {"col": "O3_2", "title": "O3_2", "ylabel": "[ppb]"}
+]
 
-    for i, col in enumerate(columns):
-        axes[i].plot(df_phyto["datetime"], df_phyto[col], label=col, linewidth=1)
-        axes[i].set_title(titles[i])
-        axes[i].grid(True)
-        axes[i].legend()
+    for i, info in enumerate(plot_info):
+        ax = axes[i]
+        # Plot the data using the details from plot_info
+        ax.plot(df_phyto["datetime"], df_phyto[info["col"]], label=info["col"], linewidth=1)
+        ax.set_title(info["title"])
+        ax.grid(True)
+        ax.set_ylabel(info["ylabel"])
+        ax.legend()
 
         # Loop through each event in df_times to mark the area around each event
         if mark_stimulus_window:
@@ -198,6 +219,25 @@ def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulu
 
     # Adjust layout for better spacing
     plt.tight_layout()
+    plt.show()
+
+
+def plot_extracted_data(df: pd.DataFrame) -> None:
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(10, 8), sharex=True)
+
+    for lst in df["differential_potential_pn1"]:
+        axes[0].plot(lst)
+        axes[0].set_title("Ozone CH0")
+        axes[0].set_ylabel("[normalized]")
+
+    for lst in df["differential_potential_pn3"]:
+        axes[1].plot(lst)
+        axes[1].set_title("Ozone CH1")
+        axes[1].set_ylabel("[normalized]")
+
+    plt.xlabel("[seconds]")
+    plt.ylabel("[normalized]")
     plt.show()
 
 
@@ -246,23 +286,28 @@ def main():
         phyto_files = discover_files(data_dir, "experiment")
         df_phyto = load_and_merge_data(data_dir, phyto_files)
 
+    df_phyto = convert_to_mv(df_phyto, "differential_potential_pn1")
+    df_phyto = convert_to_mv(df_phyto, "differential_potential_pn3")
+
     # Read Ozone times file
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
 
-    plot_basic_data(df_phyto, df_times, False)
-    plot_basic_data(df_phyto, df_times, True)
+    #plot_basic_data(df_phyto, df_times, False)
+    #plot_basic_data(df_phyto, df_times, True)
 
     # Optional: Min Max Normalization
     # Optional: AMM
 
     df_important_data = extract_important_data(df_phyto, df_times)
-
+    print
     # Optional: Min Max 40 min
     # Optional: Z-Score 40 min
 
+    plot_extracted_data(df_important_data)
+
     # split data in 10min chunks
-    df_training_split = split_data_in_10min_chunks(df_important_data)
+    df_training_split = split_data_in_Xmin_chunks(df_important_data)
     # extraploate training data to have a balanced set
 
     # Optional Correct Z-Score
