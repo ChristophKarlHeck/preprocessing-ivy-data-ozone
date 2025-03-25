@@ -22,7 +22,8 @@ CONFIG = {
     "MAX_VALUE": 200,
     "FACTOR": 1000,
     "BEFORE": 20,
-    "AFTER": 20
+    "AFTER": 20,
+    "CHUNK_SIZE": 10 #min
 }
 
 # Initialize the console
@@ -85,9 +86,7 @@ def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
 def load_times(file: str) -> pd.DataFrame:
 
     df = pd.read_csv(file)
-    print(df.head())
     df["times"] = pd.to_datetime(df['times'], format="%Y-%m-%d %H:%M:%S")
-    print(df.head())
 
     return df
 
@@ -130,7 +129,7 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
 def split_data_in_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
     "10 min training chunks"
 
-    chunk_seconds = 10 * 60
+    chunk_seconds = CONFIG["CHUNK_SIZE"] * 60
     nbr_chunks = int(((CONFIG["BEFORE"]*60) + (CONFIG["AFTER"]*60))/chunk_seconds)
     print(nbr_chunks)
 
@@ -168,7 +167,7 @@ def split_data_in_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
+def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulus_window: bool) -> None:
 
     # Create subplots
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 8), sharex=True)
@@ -186,11 +185,12 @@ def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
         axes[i].legend()
 
         # Loop through each event in df_times to mark the area around each event
-        for start_time in df_times['times']:
-            axes[i].axvline(start_time, color='blue', linestyle='--', linewidth=1.5)
-            axes[i].axvspan(start_time - pd.Timedelta(minutes=CONFIG["BEFORE"]),
-                            start_time + pd.Timedelta(minutes=CONFIG["AFTER"]),
-                            color='blue', alpha=0.2)
+        if mark_stimulus_window:
+            for start_time in df_times['times']:
+                axes[i].axvline(start_time, color='blue', linestyle='--', linewidth=1.5)
+                axes[i].axvspan(start_time - pd.Timedelta(minutes=CONFIG["BEFORE"]),
+                                start_time + pd.Timedelta(minutes=CONFIG["AFTER"]),
+                                color='blue', alpha=0.2)
 
     # Set common x-label
     plt.xlabel("Datetime")
@@ -199,6 +199,7 @@ def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
     # Adjust layout for better spacing
     plt.tight_layout()
     plt.show()
+
 
 def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None:
     """
@@ -223,6 +224,7 @@ def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None
 
 def main():
     # Argument parser
+    # Add the normalizaiton option
     parser = argparse.ArgumentParser(description="Preprocess CSV files.")
     parser.add_argument("--data-dir", required=True, help="Directory with raw files.")
     args = parser.parse_args()
@@ -248,7 +250,8 @@ def main():
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
 
-    #plot_data(df_phyto, df_times)
+    plot_basic_data(df_phyto, df_times, False)
+    plot_basic_data(df_phyto, df_times, True)
 
     # Optional: Min Max Normalization
     # Optional: AMM
@@ -258,11 +261,13 @@ def main():
     # Optional: Min Max 40 min
     # Optional: Z-Score 40 min
 
-    # split data in training chunks
-    df_training_split = split_data_in_training_chunks(df_important_data)
+    # split data in 10min chunks
+    df_training_split = split_data_in_10min_chunks(df_important_data)
     # extraploate training data to have a balanced set
 
     # Optional Correct Z-Score
+
+    # 
 
     
 
