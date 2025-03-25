@@ -31,20 +31,6 @@ CONFIG = {
 console = Console()
 
 
-def validate_date(date_str: str) -> str:
-    """
-    Validate and format the date.
-    Args:
-        date_str (str): Input date string.
-    Returns:
-        str: Formatted date string in YYYY-MM-DD format.
-    """
-    try:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y-%m-%d")
-    except ValueError:
-        raise ValueError("Invalid cutoff_date format. Use 'YYYY-MM-DD'.")
-
-
 def discover_files(data_dir: str, prefix: str) -> list[str]:
     """
     Discover CSV files matching the given prefix in the specified directory.
@@ -55,13 +41,13 @@ def discover_files(data_dir: str, prefix: str) -> list[str]:
         list[str]: List of matching file paths.
     """
     console.print(f"[bold cyan]Discovering files with prefix '{prefix}' in '{data_dir}'[/bold cyan]")
-    files = glob.glob(os.path.join(data_dir, f"{prefix}_*.csv"))
+    files = glob.glob(os.path.join(data_dir, f"{prefix}*.csv"))
     print(data_dir, files)
     console.print(f"Found [bold yellow]{len(files)}[/bold yellow] matching files.")
     return files
 
 
-def load_and_merge_data(files):
+def load_and_merge_data(data_dir:str, files) -> pd.DataFrame:
     columns = ["differential_potential_pn1", "differential_potential_pn3", "O3_1", "O3_2"]
     combined_df = None  # Start with an empty DataFrame
     list_df=[]
@@ -80,6 +66,7 @@ def load_and_merge_data(files):
         
         
         df = pd.concat(df_of_files)
+        df['datetime'] = pd.to_datetime(df['datetime'], format="%Y-%m-%d %H:%M:%S.%f")
         print(df.head())
         df.set_index("datetime", inplace=True)
         df = df.sort_index()
@@ -93,8 +80,18 @@ def load_and_merge_data(files):
     print(combined_df.head())
     print(combined_df.describe())
 
+    # Write precomputed data to file
+    path = os.path.join(data_dir, "precomputed_experiments.csv")
+    combined_df.to_csv(path, index=True)
+
     return combined_df
 
+def load_times(file) -> pd.DataFrame:
+
+    df = pd.read_csv(file)
+    df = pd.to_datetime(df['times'], format="%Y-%m-%d %H:%M:%S")
+
+    return df
 
 
 def partition_data_frames(df: pd.DataFrame) -> pd.DataFrame:
@@ -161,52 +158,39 @@ def z_score_column(df: pd.DataFrame, column: str) -> None:
     df[f"{column}_scaled"] = ((df[column] - mean) / std) * CONFIG["FACTOR"]
 
 
-def plot_data(df_phyto: pd.DataFrame, df_temp: pd.DataFrame, prefix: str, save_dir: str) -> None:
-    """
-    Plot and save the processed data.
-    Args:
-        df_phyto (pd.DataFrame): Phyto node data.
-        df_temp (pd.DataFrame): Temperature node data.
-        prefix (str): Prefix for file naming.
-        save_dir (str): Directory to save the plots.
-    """
-    fig, axs = plt.subplots(4, 1, figsize=(14, 14), sharex=True)
+def plot_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> None:
 
-    # Phyto node CH1
-    axs[0].plot(df_phyto.index, df_phyto["CH1_milli_volt"], label="CH1 Resampled")
-    axs[0].plot(df_phyto.index, df_phyto["CH1_smoothed"], label="CH1 Smoothed", linestyle="--")
-    axs[0].set_title(f"{prefix} CH1: Resampled and Smoothed Data")
-    axs[0].set_ylabel("Voltage (mV)")  # Add y-axis label
-    axs[0].set_ylim(CONFIG["MIN_VALUE"], CONFIG["MAX_VALUE"])  # Fix y-axis range
-    axs[0].legend()
-    axs[0].grid()
+    # Define the time delta (in minutes)
+    before = 30
+    after = 30
 
-    # Phyto node CH2
-    axs[1].plot(df_phyto.index, df_phyto["CH2_milli_volt"], label="CH2 Resampled")
-    axs[1].plot(df_phyto.index, df_phyto["CH2_smoothed"], label="CH2 Smoothed", linestyle="--")
-    axs[1].set_title(f"{prefix} CH2: Resampled and Smoothed Data")
-    axs[1].set_ylabel("Voltage (mV)")  # Add y-axis label
-    axs[1].set_ylim(CONFIG["MIN_VALUE"], CONFIG["MAX_VALUE"])  # Fix y-axis range
-    axs[1].legend()
-    axs[1].grid()
+    # Create subplots
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 8), sharex=True)
 
-    # Scaled Data
-    axs[2].plot(df_phyto.index, df_phyto["CH1_smoothed_scaled"], label="CH1 Scaled", linestyle=":")
-    axs[2].plot(df_phyto.index, df_phyto["CH2_smoothed_scaled"], label="CH2 Scaled", linestyle="--")
-    axs[2].set_title(f"{prefix} CH1, CH2: Scaled Data by factor {CONFIG['FACTOR']}")
-    axs[2].legend()
-    axs[2].grid()
+    # Plot each column in a separate subplot
+    # relevant sind differential_potential_pn1 (leaf), differnetial_potential_pn3 (stem), O3_1 und O3_2 die zwei ozon
+    # sensoren (aber ich weiß nicht welcher oben und welcher unten ist)
+    columns = ["differential_potential_pn1", "differential_potential_pn3", "O3_1", "O3_2"]
+    titles = ["Differential Potential Leaf", "Differential Potential Stem", "O3_1", "O3_2"]
 
-    # Temperature
-    axs[3].plot(df_temp.index, df_temp["avg_leaf_temp"], label="Avg Leaf Temp", alpha=0.7)
-    axs[3].plot(df_temp.index, df_temp["avg_air_temp"], label="Avg Air Temp", alpha=0.7)
-    axs[3].set_title("Temperature Data")
-    axs[3].legend()
-    axs[3].grid()
+    for i, col in enumerate(columns):
+        axes[i].plot(df_phyto.index, df_phyto[col], label=col, linewidth=1)
+        axes[i].set_title(titles[i])
+        axes[i].grid(True)
+        axes[i].legend()
 
+        # Loop through each event in df_times to mark the area around each event
+        # for start_time in df_times['times']:
+        #     axes[i].axvspan(start_time - pd.Timedelta(minutes=before),
+        #                     start_time + pd.Timedelta(minutes=after),
+        #                     color='blue', alpha=0.2)
+
+    # Set common x-label
+    plt.xlabel("Datetime")
+    plt.xticks(rotation=45)
+
+    # Adjust layout for better spacing
     plt.tight_layout()
-    plot_path = os.path.join(save_dir, f"{prefix}_plot.png")
-    plt.savefig(plot_path, dpi=300)
     plt.show()
 
 def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None:
@@ -233,7 +217,7 @@ def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None
 def main():
     # Argument parser
     parser = argparse.ArgumentParser(description="Preprocess CSV files.")
-    parser.add_argument("--data_dir", required=True, help="Directory with raw files.")
+    parser.add_argument("--data-dir", required=True, help="Directory with raw files.")
     args = parser.parse_args()
 
     # Normalize and validate inputs
@@ -246,26 +230,13 @@ def main():
     phyto_files = discover_files(data_dir, "experiment")
     df_phyto = load_and_merge_data(phyto_files)
 
-    # Create subplots
-    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 8), sharex=True)
+    # Read Ozone times file
+    times_files = discover_files(data_dir, "times")
+    df_times = pd.load_times(times_files[0])
 
-    # Plot each column in a separate subplot
-    columns = ["differential_potential_pn1", "differential_potential_pn3", "O3_1", "O3_2"]
-    titles = ["Differential Potential Leaf", "Differential Potential Stem", "O3_1", "O3_2"]
+    plot_data(df_phyto, df_times)
 
-    for i, col in enumerate(columns):
-        axes[i].plot(df_phyto.index, df_phyto[col], label=col, linewidth=1)
-        axes[i].set_title(titles[i])
-        axes[i].grid(True)
-        axes[i].legend()
 
-    # Set common x-label
-    plt.xlabel("Datetime")
-    plt.xticks(rotation=45)
-
-    # Adjust layout for better spacing
-    plt.tight_layout()
-    plt.show()
 
 
 
