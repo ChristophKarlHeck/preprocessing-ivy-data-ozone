@@ -113,7 +113,7 @@ def adjusted_min_max_normalization(df: pd.DataFrame, column: str) -> None:
         (CONFIG["MAX_VALUE"]/CONFIG["FACTOR"]) - (CONFIG["MIN_VALUE"]/CONFIG["FACTOR"]))
     
 
-def min_max_chunk(df: pd.DataFrame) -> None:
+def min_max_important_data(df: pd.DataFrame) -> None:
     columns = ["differential_potential_pn1", "differential_potential_pn3"]
     
     def mm_chunk(chunk):
@@ -131,7 +131,7 @@ def min_max_chunk(df: pd.DataFrame) -> None:
         df[column] = df[column].apply(mm_chunk)
 
 
-def z_score_chunk(df: pd.DataFrame) -> None:
+def z_score_important_data(df: pd.DataFrame) -> None:
     columns = ["differential_potential_pn1", "differential_potential_pn3"]
     
     def zs_chunk(chunk):
@@ -144,6 +144,18 @@ def z_score_chunk(df: pd.DataFrame) -> None:
     # Apply the normalization function to each cell in the specified columns.
     for column in columns:
         df[column] = df[column].apply(zs_chunk)
+
+
+def z_score_chunk(df: pd.DataFrame) -> None:
+    
+    def zs(chunk):
+        # Compute min and max for the list
+        chunk_mean = np.mean(chunk)
+        chunk_std = np.std(chunk)
+
+        return [((x - chunk_mean) / chunk_std)*CONFIG["FACTOR"] if pd.notnull(x) else x for x in chunk]
+
+    df["chunk"] = df["chunk"].apply(zs)
 
 
 def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> pd.DataFrame:
@@ -315,12 +327,23 @@ def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None
         console.print(f"[bold red]Failed to save configuration to '{filename}': {e}[/bold red]")
 
 def main():
-    # Argument parser
-    # Add the normalizaiton option
     parser = argparse.ArgumentParser(description="Preprocess CSV files.")
     parser.add_argument("--data-dir", required=True, type=str, help="Directory with raw files.")
-    parser.add_argument("--normalization", required=True, type=str, help="Directory with raw files.")
+    parser.add_argument(
+        "--normalization",
+        required=False,
+        type=str,
+        default=None,
+        choices=["min-max", "adjusted-min-max", "min-max-chunk", "z-score-chunk", "z-score"],
+        help="Normalization method to apply. Options: min-max, adjusted-min-max, min-max-chunk, z-score-chunk, or z-score."
+    )
     args = parser.parse_args()
+
+    # Now you can use args.normalization to conditionally apply normalization
+    if args.normalization is not None:
+        print(f"Normalization method chosen: {args.normalization}")
+    else:
+        print("No normalization method specified.")
 
     # Normalize and validate inputs
     data_dir = args.data_dir
@@ -361,10 +384,10 @@ def main():
     df_important_data = extract_important_data(df_phyto, df_times)
     
     if normalization == "min-max-chunk":
-        min_max_chunk(df_important_data)
+        min_max_important_data(df_important_data)
 
     if normalization == "z-score-chunk":
-        # Optional: Z-Score 40 min
+        z_score_important_data(df_important_data)
 
     plot_extracted_data(df_important_data)
 
@@ -374,14 +397,10 @@ def main():
     print(df_training_split.describe())
 
     if normalization == "z-score":
-        # Optional Correct Z-Score
+        z_score_chunk(df_training_split)
 
     df_final = split_chunks_in_columns(df_training_split)
     path = get_precomputed_path(data_dir, "training_data.csv")
-
-    
-
-
 
 
 
