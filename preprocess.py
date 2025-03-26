@@ -170,13 +170,18 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
 
         subset = df_phyto.loc[start_time:end_time]
 
-        rows.append({
-        'start_time': start_time,
-        'stimulus_time': stimulus_time,
-        'end_time': end_time,
-        'differential_potential_pn1': subset['differential_potential_pn1'].tolist(),
-        'differential_potential_pn3': subset['differential_potential_pn3'].tolist()
-    })
+        dp_pn1 = subset['differential_potential_pn1'].tolist()
+        dp_pn3 = subset['differential_potential_pn3'].tolist()
+
+        # Check if both lists contain no NaN values
+        if not np.any(np.isnan(dp_pn1)) and not np.any(np.isnan(dp_pn3)):
+            rows.append({
+            'start_time': start_time,
+            'stimulus_time': stimulus_time,
+            'end_time': end_time,
+            'differential_potential_pn1': dp_pn1,
+            'differential_potential_pn3': dp_pn3
+            })
         
     result_df = pd.DataFrame(rows)
     
@@ -435,7 +440,7 @@ def main():
     df_times = load_times(times_files[0])
 
     #plot_basic_data(df_phyto, df_times, False)
-    plot_basic_data(df_phyto, df_times, True)
+    #plot_basic_data(df_phyto, df_times, True)
 
     if normalization == "min-max":
         min_max_normalization(df_phyto, "differential_potential_pn1")
@@ -453,11 +458,12 @@ def main():
     if normalization == "z-score-chunk":
         z_score_important_data(df_important_data)
 
-    plot_extracted_data(df_important_data)
-    plot_extracted_data_stats(df_important_data)
+    #plot_extracted_data(df_important_data)
+    #plot_extracted_data_stats(df_important_data)
 
     # split data in 10min chunks
     df_training_split = split_data_in_Xmin_chunks(df_important_data)
+    print(df_training_split.describe())
 
     if normalization == "z-score":
         z_score_chunk(df_training_split)
