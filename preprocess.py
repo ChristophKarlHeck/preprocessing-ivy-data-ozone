@@ -205,6 +205,7 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
 
             new_rows.append({
                 'start_time': start_time,
+                'stimulus_time': stimulus_time,
                 'end_time': start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"]),
                 'channel': 0,
                 'ozone': ozone,
@@ -214,6 +215,7 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
             # Create a row for the "after" slice (Ozone = 1)
             new_rows.append({
                 'start_time': start_time,
+                'stimulus_time': stimulus_time,
                 'end_time': start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"]),
                 'channel': 1,
                 'ozone': ozone,
@@ -234,6 +236,7 @@ def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
     for idx, row in df.iterrows():
         new_row = {
             'start_time': row["start_time"],
+            'stimulus_time': row['stimulus_time'],
             'end_time': row["end_time"],
             'channel': row["channel"],
             'ozone': row["ozone"]
@@ -242,8 +245,43 @@ def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
         new_rows.append(new_row)
 
     return pd.DataFrame(new_rows)
-    
 
+
+def plot_final(df: pd.DataFrame) -> None:
+
+    print(df.head())
+
+    fig, axes = plt.subplots(2, 1, figsize=(15, 12), sharex=True)
+
+    for ozone, color in zip([0, 1], ['blue', 'orange']):
+        subset = df[(df['channel'] == 0) & (df['ozone'] == ozone)]
+        first_entry = True
+        for _, row in subset.iterrows():
+            time_range = pd.date_range(start=row['start_time'], end=row['end_time'], periods=len(row)-5)
+            values = row[[col for col in row.index if col.startswith('val_')]].values
+            axes[0].plot(time_range, values, color=color, alpha=0.5, label=f'CH0 Ozone {ozone}' if first_entry else "")
+            first_entry = False
+    axes[0].set_title('CH0 Signal')
+    axes[0].set_ylabel('[normalized]')
+    axes[0].grid()
+    axes[0].legend()
+
+    for ozone, color in zip([0, 1], ['blue', 'orange']):
+        subset = df[(df['channel'] == 1) & (df['ozone'] == ozone)]
+        first_entry = True
+        for _, row in subset.iterrows():
+            time_range = pd.date_range(start=row['start_time'], end=row['start_time'], periods=len(row)-5)
+            values = row[[col for col in row.index if col.startswith('val_')]].values
+            axes[1].plot(time_range, values, color=color, alpha=0.5, label=f'CH1 Ozone {ozone}' if first_entry else "")
+            first_entry = False
+    axes[1].set_title('CH1 Signal')
+    axes[1].set_ylabel('[normalized]')
+    axes[1].grid()
+    axes[1].legend()
+
+    plt.xlabel('Datetime')
+    plt.tight_layout()
+    plt.show()
 
 def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulus_window: bool) -> None:
 
@@ -394,12 +432,14 @@ def main():
     # split data in 10min chunks
     df_training_split = split_data_in_Xmin_chunks(df_important_data)
 
-    print(df_training_split.describe())
 
     if normalization == "z-score":
         z_score_chunk(df_training_split)
 
     df_final = split_chunks_in_columns(df_training_split)
+
+    plot_final(df_final)
+
     path = get_precomputed_path(data_dir, "training_data.csv")
 
 
