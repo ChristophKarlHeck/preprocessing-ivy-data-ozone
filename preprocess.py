@@ -249,8 +249,6 @@ def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def plot_final(df: pd.DataFrame) -> None:
 
-    print(df.head())
-
     fig, axes = plt.subplots(2, 1, figsize=(15, 12), sharex=True)
 
     for ozone, color in zip([0, 1], ['blue', 'orange']):
@@ -270,7 +268,7 @@ def plot_final(df: pd.DataFrame) -> None:
         subset = df[(df['channel'] == 1) & (df['ozone'] == ozone)]
         first_entry = True
         for _, row in subset.iterrows():
-            time_range = pd.date_range(start=row['start_time'], end=row['start_time'], periods=len(row)-5)
+            time_range = pd.date_range(start=row['start_time'], end=row['end_time'], periods=len(row)-5)
             values = row[[col for col in row.index if col.startswith('val_')]].values
             axes[1].plot(time_range, values, color=color, alpha=0.5, label=f'CH1 Ozone {ozone}' if first_entry else "")
             first_entry = False
@@ -431,7 +429,6 @@ def main():
 
     # split data in 10min chunks
     df_training_split = split_data_in_Xmin_chunks(df_important_data)
-
 
     if normalization == "z-score":
         z_score_chunk(df_training_split)
