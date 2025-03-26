@@ -340,6 +340,34 @@ def plot_extracted_data(df: pd.DataFrame) -> None:
     plt.ylabel("[normalized]")
     plt.show()
 
+def plot_extracted_data_stats(df: pd.DataFrame) -> None:
+
+    channel1_data = np.stack(df["differential_potential_pn1"].values)
+    channel3_data = np.stack(df["differential_potential_pn3"].values)
+    
+    mean_ch0 = np.mean(channel1_data, axis=0)
+    std_ch0 = np.std(channel1_data, axis=0)
+    mean_ch1 = np.mean(channel3_data, axis=0)
+    std_ch1 = np.std(channel3_data, axis=0)
+    
+    x = np.arange(mean_ch0.shape[0])
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(10, 8), sharex=True)
+    
+    axes[0].plot(x, mean_ch0, label="Mean CH0", color="blue")
+    axes[0].fill_between(x, mean_ch0 - std_ch0, mean_ch0 + std_ch0, color="blue", alpha=0.3, label="Std. Dev.")
+    axes[0].set_title("Ozone CH0 - Mean and Std")
+    axes[0].set_ylabel("[normalized]")
+    axes[0].legend()
+    
+    axes[1].plot(x, mean_ch1, label="Mean CH1", color="green")
+    axes[1].fill_between(x, mean_ch1 - std_ch1, mean_ch1 + std_ch1, color="green", alpha=0.3, label="Std. Dev.")
+    axes[1].set_title("Ozone CH1 - Mean and Std")
+    axes[1].set_ylabel("[normalized]")
+    axes[1].legend()
+    
+    plt.xlabel("[seconds]")
+    plt.show()
 
 def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None:
     """
@@ -426,6 +454,7 @@ def main():
         z_score_important_data(df_important_data)
 
     plot_extracted_data(df_important_data)
+    plot_extracted_data_stats(df_important_data)
 
     # split data in 10min chunks
     df_training_split = split_data_in_Xmin_chunks(df_important_data)
@@ -437,9 +466,11 @@ def main():
 
     plot_final(df_final)
 
-    path = get_precomputed_path(data_dir, "training_data.csv")
+    preprocessed_folder = os.path.join(data_dir, "preprocessed")
+    os.makedirs(preprocessed_folder, exist_ok=True)
+    final_path = get_precomputed_path(preprocessed_folder, f"training_data_{normalization}.csv")
 
-
+    df_final.to_csv(final_path, index=True)
 
 if __name__ == "__main__":
     main()
