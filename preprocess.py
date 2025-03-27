@@ -11,9 +11,10 @@ from rich.console import Console
 import numpy as np
 import os
 import pandas as pd
+import matplotlib.pyplot as plt
 import glob
 import argparse
-import matplotlib.pyplot as plt
+
 from typing import Optional
 
 # Constants
