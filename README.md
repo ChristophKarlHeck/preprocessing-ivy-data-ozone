@@ -27,10 +27,13 @@ python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut
 ```
 
 # data-augmention
+
+## without normalization
 ```bash
 python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut
 ```
 
+## with normalization
 ```bash
 python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut --normalization min-max
 ```
