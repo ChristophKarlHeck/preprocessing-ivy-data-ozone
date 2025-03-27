@@ -7,6 +7,10 @@ import numpy as np
 from typing import Tuple
 from tsaug import TimeWarp, Crop, Quantize, Drift, Reverse, AddNoise
 
+def get_precomputed_path(data_dir: str, name: str):
+
+    return os.path.join(data_dir, name)
+
 def get_data(data_dir: str, normalization: str) -> pd.DataFrame:
     path_pattern = f"{data_dir}/*/preprocessed/training_data_{normalization}.csv"
     training_files = glob.glob(path_pattern)
@@ -118,6 +122,19 @@ def plot_classifications(no_ozone_lists, ozone_lists) -> None:
     plt.tight_layout()
     plt.show()
 
+def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
+
+    new_rows = []
+
+    for idx, row in df.iterrows():
+        new_row = {
+            'ozone': row["ozone"]
+        }
+        new_row.update({f'val_{i}': row["signal"][i] for i in range(len(row["signal"]))})
+        new_rows.append(new_row)
+
+    return pd.DataFrame(new_rows)
+
 def main():
     parser = argparse.ArgumentParser(description="Preprocess CSV files.")
     parser.add_argument("--data-dir", required=True, type=str, help="Directory with raw files.")
@@ -161,7 +178,30 @@ def main():
     print(no_ozone_synthetic.shape)
     print(ozone_synthetic.shape)
 
+    no_ozone_lists = list(no_ozone_lists)
+    ozone_lists = list(ozone_lists)
 
+    no_ozone_lists.extend(no_ozone_synthetic.tolist())
+    ozone_lists.extend(ozone_synthetic.tolist())
+
+    all_samples = no_ozone_lists + ozone_lists
+    all_labels = [0] * len(no_ozone_lists) + [1] * len(ozone_lists)
+
+    df_final_almost = pd.DataFrame({
+    "ozone": all_labels,
+    "signal": all_samples
+    })
+
+    print(df_final_almost.head())
+
+    df_final = split_chunks_in_columns(df_final_almost)
+
+    print(df_final.head())
+
+    augmented_folder = os.path.join(data_dir, "augmented_training_data")
+    os.makedirs(augmented_folder, exist_ok=True)
+    final_path = get_precomputed_path(augmented_folder, f"augmented_data_{normalization}.csv")
+    df_final.to_csv(final_path)
 
 
 

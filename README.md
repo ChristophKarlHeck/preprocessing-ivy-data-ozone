@@ -34,3 +34,19 @@ python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozon
 ```bash
 python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut --normalization min-max
 ```
+
+```bash
+python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut --normalization adjusted-min-max
+```
+
+```bash
+python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut --normalization min-max-chunk
+```
+
+```bash
+python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut --normalization z-score-chunk
+```
+
+```bash
+python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut --normalization z-score
+```
