@@ -14,6 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import glob
 import argparse
+from scipy.stats import mode
 
 from typing import Optional
 
@@ -22,7 +23,6 @@ CONFIG = {
     "DATABITS": 8388608,
     "VREF": 2.5,
     "GAIN": 4.0,
-    "RESAMPLE_RATE": "1s",
     "MIN_VALUE": -200,
     "MAX_VALUE": 200,
     "FACTOR": 1000, # not get numerical differention
@@ -53,7 +53,7 @@ def discover_files(data_dir: str, prefix: str) -> list[str]:
     return files
 
 
-def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
+def load_and_merge_data(data_dir: str, files: list, resample_rate: str) -> pd.DataFrame:
     columns = ["differential_potential_pn1", "differential_potential_pn3", "O3_1", "O3_2"]
     combined_df = None  # Start with an empty DataFrame
     list_df=[]
@@ -73,7 +73,7 @@ def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
         df = pd.concat(df_of_files)
         df.set_index("datetime", inplace=True)
         df = df.sort_index()
-        df = df.resample(CONFIG["RESAMPLE_RATE"]).mean().interpolate()
+        df = df.resample(resample_rate).mean().interpolate()
         list_df.append(df)
 
     # Merge all DataFrames on 'datetime' by concatenating along columns
@@ -82,7 +82,7 @@ def load_and_merge_data(data_dir: str, files: list) -> pd.DataFrame:
     combined_df.set_index("datetime", inplace=True, drop=False)
 
     # Write precomputed data to file
-    path = get_precomputed_path(data_dir, "precomputed_experiments.csv")
+    path = get_precomputed_path(data_dir, f"precomputed_experiments_{resample_rate}.csv")
     combined_df.to_csv(path, index=True)
 
     return combined_df
@@ -187,6 +187,94 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
     result_df = pd.DataFrame(rows)
     
     return result_df
+
+def label_ground_truth(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> pd.DataFrame:
+    # Ensure ground_truth column exists and is initialized to 0
+    df_phyto['ground_truth'] = 0
+
+    for stimulus_time in df_times['time']:
+        start = pd.to_datetime(stimulus_time)
+        end = start + pd.Timedelta(minutes=CONFIG["AFTER"])
+        mask = (df_phyto['datetime'] >= start) & (df_phyto['datetime'] <= end)
+        df_phyto.loc[mask, 'ground_truth'] = 1
+
+    return df_phyto
+
+
+def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: int) -> pd.DataFrame:
+
+    df_phyto = df_phyto.sort_values("datetime")
+    start_time = df_phyto['datetime'].min()
+    end_time = df_phyto['datetime'].max()
+
+    seconds = (minutes / nbr_values) * 60
+
+    simulation_data = []
+
+    datetime_end = start_time + pd.Timedelta(minutes=minutes)
+    arr = df_phyto[(df_phyto['datetime'] >= current) & (df_phyto['datetime'] < datetime_end)]
+
+    signal_ch0 = arr["differential_potential_pn1"].to_numpy()
+    resampled_ch0 = np.interp(
+            np.linspace(0, len(signal_ch0) - 1, 100),
+            np.arange(len(signal_ch0)),
+            signal_ch0
+        ).tolist()
+    
+    row_ch0 = {
+        "datetime": datetime_end,
+        "channel": 0,
+        "signal": resampled_ch0
+    }
+
+    simulation_data.append(row_ch0)
+    
+    signal_ch1 = arr["differential_potential_pn3"].to_numpy()
+    resampled_ch1 = np.interp(
+            np.linspace(0, len(signal_ch1) - 1, 100),
+            np.arange(len(signal_ch1)),
+            signal_ch1
+        ).tolist()
+    
+    row_ch1 = {
+        "datetime": datetime_end,
+        "channel": 1,
+        "signal": resampled_ch1
+    }
+
+    simulation_data.append(row_ch1)
+ 
+
+    current = datetime_end
+    while current + pd.Timedelta(seconds=seconds) <= end_time:
+
+        segment = df_phyto[(df_phyto['datetime'] >= current) & (df_phyto['datetime'] < current + pd.Timedelta(seconds=seconds))]
+
+        # Downsample to 100 points using interpolation
+        signal_ch0 = segment["differential_potential_pn1"].to_numpy()
+        resampled_ch0 = resampled_ch0[1:] + [np.mean(signal_ch0)]
+
+        signal_ch1 = segment["differential_potential_pn3"].to_numpy()
+        resampled_ch1 = resampled_ch1[1:] + [np.mean(signal_ch1)]
+
+        row_ch0 = {
+            "datetime": current + pd.Timedelta(seconds=seconds),
+            "channel": 0,
+            "signal": resampled_ch0
+        }
+
+        row_ch1 = {
+            "datetime": current + pd.Timedelta(seconds=seconds),
+            "channel": 1,
+            "signal": resampled_ch1
+        }
+
+        simulation_data.append(row_ch0)
+        simulation_data.append(row_ch1)
+
+        current += pd.Timedelta(seconds=6)
+
+    return pd.DataFrame(simulation_data)
 
 def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
     "X min training chunks"
@@ -396,42 +484,23 @@ def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None
     except Exception as e:
         console.print(f"[bold red]Failed to save configuration to '{filename}': {e}[/bold red]")
 
-def main():
-    parser = argparse.ArgumentParser(description="Preprocess CSV files.")
-    parser.add_argument("--data-dir", required=True, type=str, help="Directory with raw files.")
-    parser.add_argument(
-        "--normalization",
-        required=False,
-        type=str,
-        default=None,
-        choices=["min-max", "adjusted-min-max", "min-max-chunk", "z-score-chunk", "z-score"],
-        help="Normalization method to apply. Options: min-max, adjusted-min-max, min-max-chunk, z-score-chunk, or z-score."
-    )
-    args = parser.parse_args()
-
-    # Now you can use args.normalization to conditionally apply normalization
-    if args.normalization is not None:
-        print(f"Normalization method chosen: {args.normalization}")
-    else:
-        print("No normalization method specified.")
-
-    # Normalize and validate inputs
-    data_dir = args.data_dir
-    normalization = args.normalization
-
-    # Print Input Parameters
-    console.print(f"[bold green]Data Directory:[/bold green] {data_dir}")
-
+def check_for_precomputation(data_dir: str, resample_rate: str) -> pd.DataFrame:
     # Process Phyto Node 
     df_phyto = None
-    path = get_precomputed_path(data_dir, "precomputed_experiments.csv")
+    path = get_precomputed_path(data_dir, "precomputed_experiments_preprocess.csv")
     if os.path.exists(path):
         df_phyto = pd.read_csv(path)
         df_phyto['datetime'] = pd.to_datetime(df_phyto['datetime'], format="%Y-%m-%d %H:%M:%S")
         df_phyto.set_index("datetime", inplace=True, drop=False)
     else:
         phyto_files = discover_files(data_dir, "experiment")
-        df_phyto = load_and_merge_data(data_dir, phyto_files)
+        df_phyto = load_and_merge_data(data_dir, phyto_files, "1s")
+    
+    return df_phyto
+
+def preprocess(data_dir: str, normalization: str, resample_rate: str):
+
+    df_phyto = check_for_precomputation(data_dir, resample_rate)
 
     df_phyto = convert_to_mv(df_phyto, "differential_potential_pn1")
     df_phyto = convert_to_mv(df_phyto, "differential_potential_pn3")
@@ -473,11 +542,62 @@ def main():
 
     plot_final(df_final)
 
-    preprocessed_folder = os.path.join(data_dir, "preprocessed")
+    preprocessed_folder = os.path.join(data_dir, "preprocessed_test")
     os.makedirs(preprocessed_folder, exist_ok=True)
     final_path = get_precomputed_path(preprocessed_folder, f"training_data_{normalization}.csv")
 
     df_final.to_csv(final_path, index=True)
+
+def create_simulation_files(data_dir: str, resample_rate: str) -> None:
+   
+    df_phyto = check_for_precomputation(data_dir, resample_rate)
+
+    df_phyto = convert_to_mv(df_phyto, "differential_potential_pn1")
+    df_phyto = convert_to_mv(df_phyto, "differential_potential_pn3")
+
+    times_files = discover_files(data_dir, "times")
+    df_times = load_times(times_files[0])
+
+    df_phyto = extract_simulation_data(df_phyto, 10, 100)
+    df_phyto = label_ground_truth(df_phyto, df_times)
+
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Preprocess CSV files.")
+    parser.add_argument("--data-dir", required=True, type=str, help="Directory with raw files.")
+    parser.add_argument(
+        "--normalization",
+        required=False,
+        type=str,
+        default=None,
+        choices=["min-max", "adjusted-min-max", "min-max-chunk", "z-score-chunk", "z-score"],
+        help="Normalization method to apply. Options: min-max, adjusted-min-max, min-max-chunk, z-score-chunk, or z-score."
+    )
+    parser.add_argument("--create-simulation-files", required=False, type=bool, default=False, help="Create Simulation Files")
+    args = parser.parse_args()
+
+    # Now you can use args.normalization to conditionally apply normalization
+    if args.normalization is not None:
+        print(f"Normalization method chosen: {args.normalization}")
+    else:
+        print("No normalization method specified.")
+
+    # Normalize and validate inputs
+    data_dir = args.data_dir
+    normalization = args.normalization
+    create_simulation_files = args.create_simulation_files
+
+    # Print Input Parameters
+    console.print(f"[bold green]Data Directory:[/bold green] {data_dir}")
+
+    if create_simulation_files:
+        create_simulation_files(data_dir, "10L")
+
+    else:
+        preprocess(data_dir, normalization, "1s")
+
+
 
 if __name__ == "__main__":
     main()
