@@ -38,6 +38,7 @@ def get_precomputed_path(data_dir: str, name: str):
 
     return os.path.join(data_dir, name)
 
+
 def discover_files(data_dir: str, prefix: str) -> list[str]:
     """
     Discover CSV files matching the given prefix in the specified directory.
@@ -79,6 +80,7 @@ def load_and_merge_data(data_dir: str, files: list, resample_rate: str) -> pd.Da
     # Merge all DataFrames on 'datetime' by concatenating along columns
     combined_df = pd.concat(list_df, axis=1).reset_index()
     combined_df['datetime'] = pd.to_datetime(combined_df['datetime'], format="%Y-%m-%d %H:%M:%S")
+    combined_df['datetime'] = combined_df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S.%f')
     combined_df.set_index("datetime", inplace=True, drop=False)
 
     # Write precomputed data to file
@@ -87,11 +89,13 @@ def load_and_merge_data(data_dir: str, files: list, resample_rate: str) -> pd.Da
 
     return combined_df
 
+
 def convert_to_mv(df: pd.DataFrame, column: str) -> pd.DataFrame:
     
     df[column] = ((df[column] / CONFIG["DATABITS"] - 1) * CONFIG["VREF"] / CONFIG["GAIN"]) * 1000
 
     return df
+
 
 def load_times(file: str) -> pd.DataFrame:
 
@@ -188,6 +192,7 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
     
     return result_df
 
+
 def label_ground_truth(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> pd.DataFrame:
     # Ensure ground_truth column exists and is initialized to 0
     df_phyto['ground_truth'] = 0
@@ -202,17 +207,18 @@ def label_ground_truth(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> pd.Dat
 
 
 def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: int) -> pd.DataFrame:
+    print("Extract Simulation data")
 
     df_phyto = df_phyto.sort_index()
-    start_time = df_phyto['datetime'].min()
-    end_time = df_phyto['datetime'].max()
+    start_time = pd.to_datetime(df_phyto['datetime'].min())
+    end_time = pd.to_datetime(df_phyto['datetime'].max())
 
     seconds = (minutes / nbr_values) * 60
 
     simulation_data = []
 
     datetime_end = start_time + pd.Timedelta(minutes=minutes)
-    arr = df_phyto[(df_phyto['datetime'] >= current) & (df_phyto['datetime'] < datetime_end)]
+    arr = df_phyto[(df_phyto['datetime'] >= start_time) & (df_phyto['datetime'] < datetime_end)]
 
     signal_ch0 = arr["differential_potential_pn1"].to_numpy()
     resampled_ch0 = np.interp(
@@ -276,6 +282,7 @@ def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: in
 
     return pd.DataFrame(simulation_data)
 
+
 def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
     "X min training chunks"
 
@@ -321,6 +328,7 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
     df = pd.DataFrame(new_rows)
 
     return df
+
 
 def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
 
@@ -374,6 +382,7 @@ def plot_final(df: pd.DataFrame) -> None:
     plt.xlabel('Datetime')
     plt.tight_layout()
     plt.show()
+
 
 def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulus_window: bool) -> None:
 
@@ -434,6 +443,7 @@ def plot_extracted_data(df: pd.DataFrame) -> None:
     plt.ylabel("[normalized]")
     plt.show()
 
+
 def plot_extracted_data_stats(df: pd.DataFrame) -> None:
 
     channel1_data = np.stack(df["differential_potential_pn1"].values)
@@ -463,6 +473,7 @@ def plot_extracted_data_stats(df: pd.DataFrame) -> None:
     plt.xlabel("[seconds]")
     plt.show()
 
+
 def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None:
     """
     Save the global configuration dictionary to a .txt file in the specified directory
@@ -484,19 +495,21 @@ def save_config_to_txt(configuration: dict, directory: str, prefix: str) -> None
     except Exception as e:
         console.print(f"[bold red]Failed to save configuration to '{filename}': {e}[/bold red]")
 
+
 def check_for_precomputation(data_dir: str, resample_rate: str) -> pd.DataFrame:
     # Process Phyto Node 
     df_phyto = None
-    path = get_precomputed_path(data_dir, "precomputed_experiments_preprocess.csv")
+    path = get_precomputed_path(data_dir, f"precomputed_experiments_{resample_rate}.csv")
     if os.path.exists(path):
         df_phyto = pd.read_csv(path)
-        df_phyto['datetime'] = pd.to_datetime(df_phyto['datetime'], format="%Y-%m-%d %H:%M:%S")
+        df_phyto['datetime'] = pd.to_datetime(df_phyto['datetime'], format="%Y-%m-%d %H:%M:%S.%f")
         df_phyto.set_index("datetime", inplace=True, drop=False)
     else:
         phyto_files = discover_files(data_dir, "experiment")
         df_phyto = load_and_merge_data(data_dir, phyto_files, resample_rate)
     
     return df_phyto
+
 
 def preprocess(data_dir: str, normalization: str, resample_rate: str):
 
@@ -548,6 +561,7 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
 
     df_final.to_csv(final_path, index=True)
 
+
 def create_simulation_files(data_dir: str, resample_rate: str) -> None:
    
     df_phyto = check_for_precomputation(data_dir, resample_rate)
@@ -560,6 +574,11 @@ def create_simulation_files(data_dir: str, resample_rate: str) -> None:
 
     df_phyto = extract_simulation_data(df_phyto, 10, 100)
     df_phyto = label_ground_truth(df_phyto, df_times)
+
+    preprocessed_folder = os.path.join(data_dir, "simulation")
+    os.makedirs(preprocessed_folder, exist_ok=True)
+    final_path = get_precomputed_path(preprocessed_folder, f"simulation_data.csv")
+    df_phyto.to_csv(final_path, index=True)
 
 
 
@@ -592,7 +611,7 @@ def main():
     console.print(f"[bold green]Data Directory:[/bold green] {data_dir}")
 
     if create_simulation_files_flag:
-        create_simulation_files(data_dir, "10L")
+        create_simulation_files(data_dir, "10ms")
 
     else:
         preprocess(data_dir, normalization, "1s")
