@@ -197,7 +197,7 @@ def label_ground_truth(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> pd.Dat
     # Ensure ground_truth column exists and is initialized to 0
     df_phyto['ground_truth'] = 0
 
-    for stimulus_time in df_times['time']:
+    for stimulus_time in df_times['times']:
         start = pd.to_datetime(stimulus_time)
         end = start + pd.Timedelta(minutes=CONFIG["AFTER"])
         mask = (df_phyto['datetime'] >= start) & (df_phyto['datetime'] <= end)
@@ -210,6 +210,7 @@ def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: in
     print("Extract Simulation data")
 
     df_phyto = df_phyto.sort_index()
+    df_phyto = df_phyto.dropna(subset=["differential_potential_pn1", "differential_potential_pn3"])
     start_time = pd.to_datetime(df_phyto['datetime'].min())
     end_time = pd.to_datetime(df_phyto['datetime'].max())
 
@@ -253,6 +254,7 @@ def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: in
 
     current = datetime_end
     while current + pd.Timedelta(seconds=seconds) <= end_time:
+        print("Current:", current, "| End:", end_time)
 
         segment = df_phyto[(df_phyto['datetime'] >= current) & (df_phyto['datetime'] < current + pd.Timedelta(seconds=seconds))]
 
@@ -572,7 +574,7 @@ def create_simulation_files(data_dir: str, resample_rate: str) -> None:
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
 
-    df_phyto = extract_simulation_data(df_phyto, 10, 100)
+    #df_phyto = extract_simulation_data(df_phyto, 10, 100)
     df_phyto = label_ground_truth(df_phyto, df_times)
 
     preprocessed_folder = os.path.join(data_dir, "simulation")
