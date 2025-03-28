@@ -574,7 +574,7 @@ def create_simulation_files(data_dir: str, resample_rate: str) -> None:
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
 
-    #df_phyto = extract_simulation_data(df_phyto, 10, 100)
+    df_phyto = extract_simulation_data(df_phyto, 10, 100)
     df_phyto = label_ground_truth(df_phyto, df_times)
 
     preprocessed_folder = os.path.join(data_dir, "simulation")
