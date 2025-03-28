@@ -203,7 +203,7 @@ def label_ground_truth(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> pd.Dat
 
 def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: int) -> pd.DataFrame:
 
-    df_phyto = df_phyto.sort_values("datetime")
+    df_phyto = df_phyto.sort_index()
     start_time = df_phyto['datetime'].min()
     end_time = df_phyto['datetime'].max()
 
@@ -494,7 +494,7 @@ def check_for_precomputation(data_dir: str, resample_rate: str) -> pd.DataFrame:
         df_phyto.set_index("datetime", inplace=True, drop=False)
     else:
         phyto_files = discover_files(data_dir, "experiment")
-        df_phyto = load_and_merge_data(data_dir, phyto_files, "1s")
+        df_phyto = load_and_merge_data(data_dir, phyto_files, resample_rate)
     
     return df_phyto
 
@@ -586,12 +586,12 @@ def main():
     # Normalize and validate inputs
     data_dir = args.data_dir
     normalization = args.normalization
-    create_simulation_files = args.create_simulation_files
+    create_simulation_files_flag = args.create_simulation_files
 
     # Print Input Parameters
     console.print(f"[bold green]Data Directory:[/bold green] {data_dir}")
 
-    if create_simulation_files:
+    if create_simulation_files_flag:
         create_simulation_files(data_dir, "10L")
 
     else:

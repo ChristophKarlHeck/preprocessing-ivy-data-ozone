@@ -53,3 +53,9 @@ python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozon
 ```bash
 python3 data_augmention.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut --normalization z-score
 ```
+
+# Make simulation data
+
+```bash
+python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut/Exp44_Ivy2 --create-simulation-files 1
+```
