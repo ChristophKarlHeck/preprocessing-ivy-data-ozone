@@ -227,15 +227,7 @@ def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: in
             np.arange(len(signal_ch0)),
             signal_ch0
         ).tolist()
-    
-    row_ch0 = {
-        "datetime": datetime_end,
-        "channel": 0,
-        "signal": resampled_ch0
-    }
 
-    simulation_data.append(row_ch0)
-    
     signal_ch1 = arr["differential_potential_pn3"].to_numpy()
     resampled_ch1 = np.interp(
             np.linspace(0, len(signal_ch1) - 1, 100),
@@ -243,15 +235,14 @@ def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: in
             signal_ch1
         ).tolist()
     
-    row_ch1 = {
+    row = {
         "datetime": datetime_end,
-        "channel": 1,
-        "signal": resampled_ch1
+        "input_not_normalized_ch0": resampled_ch0,
+        "input_not_normalized_ch1": resampled_ch1,
     }
 
-    simulation_data.append(row_ch1)
- 
-
+    simulation_data.append(row)
+    
     current = datetime_end
     while current + pd.Timedelta(seconds=seconds) <= end_time:
         print("Current:", current, "| End:", end_time)
@@ -260,25 +251,18 @@ def extract_simulation_data(df_phyto: pd.DataFrame, minutes: int, nbr_values: in
 
         # Downsample to 100 points using interpolation
         signal_ch0 = segment["differential_potential_pn1"].to_numpy()
-        resampled_ch0 = resampled_ch0[1:] + [np.mean(signal_ch0)]
+        resampled_ch0 = resampled_ch0[1:] + [float(np.mean(signal_ch0))]
 
         signal_ch1 = segment["differential_potential_pn3"].to_numpy()
-        resampled_ch1 = resampled_ch1[1:] + [np.mean(signal_ch1)]
+        resampled_ch1 = resampled_ch1[1:] + [float(np.mean(signal_ch1))]
 
-        row_ch0 = {
+        row = {
             "datetime": current + pd.Timedelta(seconds=seconds),
-            "channel": 0,
-            "signal": resampled_ch0
+            "input_not_normalized_ch0": resampled_ch0,
+            "input_not_normalized_ch1": resampled_ch1,
         }
 
-        row_ch1 = {
-            "datetime": current + pd.Timedelta(seconds=seconds),
-            "channel": 1,
-            "signal": resampled_ch1
-        }
-
-        simulation_data.append(row_ch0)
-        simulation_data.append(row_ch1)
+        simulation_data.append(row)
 
         current += pd.Timedelta(seconds=6)
 
