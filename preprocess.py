@@ -79,7 +79,7 @@ def load_and_merge_data(data_dir: str, files: list, resample_rate: str) -> pd.Da
 
     # Merge all DataFrames on 'datetime' by concatenating along columns
     combined_df = pd.concat(list_df, axis=1).reset_index()
-    combined_df['datetime'] = pd.to_datetime(combined_df['datetime'], format="%Y-%m-%d %H:%M:%S")
+    combined_df['datetime'] = pd.to_datetime(combined_df['datetime'])
     combined_df['datetime'] = combined_df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S.%f')
     combined_df.set_index("datetime", inplace=True, drop=False)
 
