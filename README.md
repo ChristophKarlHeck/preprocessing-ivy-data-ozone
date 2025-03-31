@@ -63,3 +63,8 @@ python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut
 ```bash
 python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut/Exp45_Ivy4 --create-simulation-files 1
 ```
+
+# Evaluate Online Classification
+```bash
+python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut/Exp48_ivy525 --prefix C1 --from_date "2025-03-11 10:00" --until_date "2025-03-15 16:00"
+```
