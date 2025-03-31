@@ -66,5 +66,5 @@ python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut
 
 # Evaluate Online Classification
 ```bash
-python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut/Exp48_ivy525 --prefix C1 --from_date "2025-03-11 10:00" --until_date "2025-03-15 16:00"
+python3 check_classification.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut/Exp48_ivy525 --prefix C1 --from-date "2025-03-29 14:45" --until-date "2025-03-30 22:00" --threshold 0.33 --normalization z-score
 ```
