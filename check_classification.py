@@ -38,6 +38,10 @@ CONFIG = {
 # Initialize the console
 console = Console()
 
+def get_precomputed_path(data_dir: str, name: str):
+
+    return os.path.join(data_dir, name)
+
 def validate_date(date_str: str) -> str:
     try:
         # Parse the input string to a datetime object
@@ -158,6 +162,24 @@ def label_ground_truth(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> pd.Dat
         df_phyto.loc[mask, 'ground_truth'] = 1
 
     return df_phyto
+
+def make_ready_for_classification(df: pd.DataFrame, data_dir):
+
+    df['input_not_normalized_ch0'] = df['VoltagesCh0NotScaled'].apply(lambda x: np.array(eval(x)))
+    df['input_not_normalized_ch1'] = df['VoltagesCh1NotScaled'].apply(lambda x: np.array(eval(x)))
+
+    df.drop(columns=[
+        'VoltagesCh0NotScaled', 'ClassificationCh0',
+        'VoltagesCh1NotScaled', 'ClassificationCh1'], inplace=True)
+    
+    df['datetime'] = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S.%f').str[:-3]
+    df = df.reset_index(drop=True)
+    
+    preprocessed_folder = os.path.join(data_dir, "simulation")
+    os.makedirs(preprocessed_folder, exist_ok=True)
+    final_path = get_precomputed_path(preprocessed_folder, f"simulation_data.csv")
+    df.to_csv(final_path, index=True)
+
 
 def plot_data(df_classified: pd.DataFrame, threshold: float) -> None:
     
@@ -287,7 +309,7 @@ def main():
     df_ozone = df_ozone.sort_values(by="datetime").reset_index(drop=True)
     df_ozone = cut_data(df_ozone, from_date, until_date)
 
-    plot_o3(df_ozone)
+    #plot_o3(df_ozone)
 
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
@@ -299,6 +321,10 @@ def main():
     df_classified['datetime'] = pd.to_datetime(df_classified['datetime'], format='%Y-%m-%d %H:%M:%S:%f', errors='coerce')
     df_classified = df_classified.sort_values(by="datetime").reset_index(drop=True)
     df_classified = cut_data(df_classified, from_date, until_date)
+    df_classified = label_ground_truth(df_classified, df_times)
+    df_copy = df_classified.copy()
+    make_ready_for_classification(df_copy, data_dir)
+    # 
     df_classified = extract_classification(df_classified)
     df_classified = normalize_input(df_classified, normalization)
     df_classified = smooth_classification(df_classified, 100)
