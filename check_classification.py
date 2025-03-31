@@ -96,8 +96,8 @@ def normalize_input(df: pd.DataFrame, normalization: str) -> pd.DataFrame:
     df['VoltagesCh1'] = df['VoltagesCh1NotScaled'].apply(lambda x: np.array(eval(x)))
 
     if normalization == "z-score":
-        df['input_normalized_ch0'] = df['VoltagesCh0'].apply(lambda x: z_score(x))
-        df['input_normalized_ch1'] = df['VoltagesCh1'].apply(lambda x: z_score(x))
+        df['input_normalized_ch0'] = df['VoltagesCh0'].apply(lambda x: z_score(x,1000))
+        df['input_normalized_ch1'] = df['VoltagesCh1'].apply(lambda x: z_score(x,1000))
 
      # Drop unnecessary columns
     df.drop(columns=['VoltagesCh0NotScaled', 'VoltagesCh1NotScaled'], inplace=True)
@@ -165,8 +165,8 @@ def label_ground_truth(df_phyto: pd.DataFrame, df_times: pd.DataFrame) -> pd.Dat
 
 def make_ready_for_classification(df: pd.DataFrame, data_dir):
 
-    df['input_not_normalized_ch0'] = df['VoltagesCh0NotScaled'].apply(lambda x: np.array(eval(x)))
-    df['input_not_normalized_ch1'] = df['VoltagesCh1NotScaled'].apply(lambda x: np.array(eval(x)))
+    df['input_not_normalized_ch0'] = df['VoltagesCh0NotScaled'].apply(lambda x: "[" + ",".join(map(str, eval(x))) + "]")
+    df['input_not_normalized_ch1'] = df['VoltagesCh1NotScaled'].apply(lambda x: "[" + ",".join(map(str, eval(x))) + "]")
 
     df.drop(columns=[
         'VoltagesCh0NotScaled', 'ClassificationCh0',
@@ -186,8 +186,8 @@ def plot_data(df_classified: pd.DataFrame, threshold: float) -> None:
     plant_id=999
     #------------------Prepare Data for Plot---------------------------------------#
     window_size = 100 # 100 = 10min
-    df_classified['LastVoltageCh0'] = df_classified['VoltagesCh0'].apply(lambda x: x[-1])
-    df_classified['LastVoltageCh1'] = df_classified['VoltagesCh1'].apply(lambda x: x[-1])
+    df_classified['LastVoltageCh0'] = df_classified['input_normalized_ch0'].apply(lambda x: x[-1])
+    df_classified['LastVoltageCh1'] = df_classified['input_normalized_ch1'].apply(lambda x: x[-1])
     df_classified["LastVoltageCh0"] = df_classified["LastVoltageCh0"].rolling(window=window_size, min_periods=1).mean()
     df_classified["LastVoltageCh1"] = df_classified["LastVoltageCh1"].rolling(window=window_size, min_periods=1).mean()
     fig_width = 5.90666  # Width in inches
