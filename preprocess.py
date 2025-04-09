@@ -28,7 +28,8 @@ CONFIG = {
     "FACTOR": 1000, # not get numerical differention
     "BEFORE": 60, # minutes before stimulus
     "AFTER": 60, # minutes after stimulus
-    "CHUNK_SIZE": 10 #min
+    "CHUNK_SIZE": 30 ,#min
+    "GROUP_SIZE": 18 # 18s merged
 }
 
 # Initialize the console
@@ -108,8 +109,8 @@ def load_times(file: str) -> pd.DataFrame:
 def min_max_normalization(df: pd.DataFrame, column: str) -> None:
 
     df[column] = ((df[column] - CONFIG["MIN_VALUE"]) / (
-        CONFIG["MAX_VALUE"] - CONFIG["MIN_VALUE"]) * CONFIG["FACTOR"]
-    )
+        CONFIG["MAX_VALUE"] - CONFIG["MIN_VALUE"])) * CONFIG["FACTOR"]
+    
 
 
 def adjusted_min_max_normalization(df: pd.DataFrame, column: str) -> None:
@@ -158,7 +159,7 @@ def z_score_chunk(df: pd.DataFrame) -> None:
         chunk_mean = np.mean(chunk)
         chunk_std = np.std(chunk)
 
-        return [((x - chunk_mean) / chunk_std)*CONFIG["FACTOR"] if pd.notnull(x) else x for x in chunk]
+        return [((x - chunk_mean) / chunk_std) if pd.notnull(x) else x for x in chunk]
 
     df["chunk"] = df["chunk"].apply(zs)
 
@@ -317,23 +318,23 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
 
 def downsample_by_mean(data):
     data = np.array(data)
-    if data.shape[0] % 6 != 0:
+    if data.shape[0] % CONFIG["GROUP_SIZE"] != 0:
         raise ValueError("Length of data must be a multiple of 6.")
 
     # Reshape the data into a 2D array with each row containing 6 values.
-    reshaped_data = data.reshape(-1, 6)
+    reshaped_data = data.reshape(-1, CONFIG["GROUP_SIZE"])
     
     # Compute the mean along the axis 1 (i.e. for each row)
     downsampled = reshaped_data.mean(axis=1)
     return downsampled
 
 
-def split_data_in_rolling_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
+def split_data_in_rolling_chunks(df: pd.DataFrame) -> pd.DataFrame:
     "X min training chunks"
 
     chunk_seconds = CONFIG["CHUNK_SIZE"] * 60
 
-    group_size = 6
+    group_size = CONFIG["GROUP_SIZE"]
 
     new_rows = []
 
@@ -366,8 +367,8 @@ def split_data_in_rolling_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
                 'chunk': chunk_ch1
             })
 
-        pn1_list_after_600 = pn1_list[600:]
-        pn3_list_after_600 = pn3_list[600:]
+        pn1_list_after_600 = pn1_list[chunk_seconds:]
+        pn3_list_after_600 = pn3_list[chunk_seconds:]
         n_groups_ch0 = len(pn1_list) // group_size
         n_groups_ch1 = len(pn3_list) // group_size
         n_groups = min(n_groups_ch0, n_groups_ch1)
@@ -375,9 +376,9 @@ def split_data_in_rolling_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
             start_time = start_time + pd.Timedelta(seconds=group_size)
             end_time = start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"])
             ozone_flag = 1 if end_time > stimulus_time and end_time < (stimulus_time + pd.Timedelta(minutes=20)) else 0
-            group_ch0 = np.array(pn1_list_after_600[i*6:(i+1)*6])
-            group_ch1 = np.array(pn3_list_after_600[i*6:(i+1)*6])
-            
+            group_ch0 = np.array(pn1_list_after_600[i*group_size:(i+1)*group_size])
+            group_ch1 = np.array(pn3_list_after_600[i*group_size:(i+1)*group_size])
+
             if group_ch0.size > 0 and group_ch1.size > 0:
                 mean_ch0 = group_ch0.mean()
                 mean_ch1 = group_ch1.mean()
@@ -677,7 +678,7 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
 
     # split data in 10min chunks
     #df_training_split = split_data_in_Xmin_chunks(df_important_data)
-    df_training_split = split_data_in_rolling_10min_chunks(df_important_data)
+    df_training_split = split_data_in_rolling_chunks(df_important_data)
     print(df_training_split.describe())
 
     if normalization == "z-score":
@@ -687,7 +688,7 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
 
     plot_final(df_final)
 
-    preprocessed_folder = os.path.join(data_dir, "preprocessed_test")
+    preprocessed_folder = os.path.join(data_dir, "preprocessed")
     os.makedirs(preprocessed_folder, exist_ok=True)
     final_path = get_precomputed_path(preprocessed_folder, f"training_data_{normalization}.csv")
 
