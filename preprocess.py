@@ -26,8 +26,8 @@ CONFIG = {
     "MIN_VALUE": -200,
     "MAX_VALUE": 200,
     "FACTOR": 1000, # not get numerical differention
-    "BEFORE": 20, # minutes before stimulus
-    "AFTER": 20, # minutes after stimulus
+    "BEFORE": 60, # minutes before stimulus
+    "AFTER": 60, # minutes after stimulus
     "CHUNK_SIZE": 10 #min
 }
 
@@ -144,7 +144,7 @@ def z_score_important_data(df: pd.DataFrame) -> None:
         chunk_mean = np.mean(chunk)
         chunk_std = np.std(chunk)
 
-        return [((x - chunk_mean) / chunk_std)*CONFIG["FACTOR"] if pd.notnull(x) else x for x in chunk]
+        return [((x - chunk_mean) / chunk_std) if pd.notnull(x) else x for x in chunk]
 
     # Apply the normalization function to each cell in the specified columns.
     for column in columns:
@@ -315,11 +315,156 @@ def split_data_in_Xmin_chunks(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+def downsample_by_mean(data):
+    data = np.array(data)
+    if data.shape[0] % 6 != 0:
+        raise ValueError("Length of data must be a multiple of 6.")
+
+    # Reshape the data into a 2D array with each row containing 6 values.
+    reshaped_data = data.reshape(-1, 6)
+    
+    # Compute the mean along the axis 1 (i.e. for each row)
+    downsampled = reshaped_data.mean(axis=1)
+    return downsampled
+
+
+def split_data_in_rolling_10min_chunks(df: pd.DataFrame) -> pd.DataFrame:
+    "X min training chunks"
+
+    chunk_seconds = CONFIG["CHUNK_SIZE"] * 60
+
+    group_size = 6
+
+    new_rows = []
+
+    # Iterate over each row in result_df
+    for idx, segment in df.iterrows():
+        start_time = segment['start_time']
+        stimulus_time = segment['stimulus_time']
+        end_time = start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"])
+        pn1_list = segment['differential_potential_pn1']
+        pn3_list = segment['differential_potential_pn3']
+
+        chunk_ch0 = downsample_by_mean(pn1_list[0:chunk_seconds])
+        new_rows.append({
+                'start_time': start_time,
+                'stimulus_time': stimulus_time,
+                'end_time': end_time,
+                'channel': 0,
+                'ozone': 0,
+                'chunk': chunk_ch0
+            })
+
+
+        chunk_ch1 = downsample_by_mean(pn3_list[0:chunk_seconds])
+        new_rows.append({
+                'start_time': start_time,
+                'stimulus_time': stimulus_time,
+                'end_time': end_time,
+                'channel': 0,
+                'ozone': 0,
+                'chunk': chunk_ch1
+            })
+
+        pn1_list_after_600 = pn1_list[600:]
+        pn3_list_after_600 = pn3_list[600:]
+        n_groups_ch0 = len(pn1_list) // group_size
+        n_groups_ch1 = len(pn3_list) // group_size
+        n_groups = min(n_groups_ch0, n_groups_ch1)
+        for i in range(n_groups):
+            start_time = start_time + pd.Timedelta(seconds=group_size)
+            end_time = start_time + pd.Timedelta(minutes=CONFIG["CHUNK_SIZE"])
+            ozone_flag = 1 if end_time > stimulus_time and end_time < (stimulus_time + pd.Timedelta(minutes=20)) else 0
+            group_ch0 = np.array(pn1_list_after_600[i*6:(i+1)*6])
+            group_ch1 = np.array(pn3_list_after_600[i*6:(i+1)*6])
+            
+            if group_ch0.size > 0 and group_ch1.size > 0:
+                mean_ch0 = group_ch0.mean()
+                mean_ch1 = group_ch1.mean()
+
+                chunk_ch0 = np.append(chunk_ch0[1:], mean_ch0)
+                chunk_ch1 = np.append(chunk_ch1[1:], mean_ch1)
+
+                new_rows.append({
+                    'start_time': start_time,
+                    'stimulus_time': stimulus_time,
+                    'end_time': end_time,
+                    'channel': 0,
+                    'ozone': ozone_flag,
+                    'chunk': chunk_ch0
+                })
+
+                new_rows.append({
+                    'start_time': start_time,
+                    'stimulus_time': stimulus_time,
+                    'end_time': end_time,
+                    'channel': 1,
+                    'ozone': ozone_flag,
+                    'chunk': chunk_ch1
+                })
+        
+
+
+    df = pd.DataFrame(new_rows)
+
+    # For plotting, you may want to focus on one channel (say, Channel 0).
+    df_channel0 = df[df['channel'] == 0]
+
+    # Create a scatter plot showing the heat classification over time.
+    plt.figure(figsize=(12, 6))
+    # We'll plot 1 for heat and 0 for not heat; using different colors.
+    plt.scatter(df_channel0['end_time'], df_channel0['ozone'], 
+                c=df_channel0['ozone'], cmap='coolwarm', marker='o')
+    plt.xlabel("Datetime")
+    plt.ylabel("Ozone Classification (0 = Not Ozone, 1 = Ozone)")
+    plt.title("Ozone Classification Over Time (Channel 0)")
+    plt.grid(True)
+    plt.show()
+
+    # Separate the two classes.
+    df_ozone0 = df[df['ozone'] == 0]
+    df_ozone1 = df[df['ozone'] == 1]
+
+    # Determine the size of the minority class.
+    n_min = min(len(df_ozone0), len(df_ozone1))
+
+    # Downsample both classes to have the same number of rows.
+    df_ozone0_balanced = df_ozone0.sample(n=n_min, random_state=42)
+    df_ozone1_balanced = df_ozone1.sample(n=n_min, random_state=42)
+
+    # Combine the balanced classes.
+    df = pd.concat([df_ozone0_balanced, df_ozone1_balanced]).sort_values('start_time').reset_index(drop=True)
+
+    counts_original = df['ozone'].value_counts().sort_index()
+    # Count classes in the balanced dataset
+    counts_balanced = df['ozone'].value_counts().sort_index()
+
+    # Create a figure with two subplots side by side.
+    plt.figure(figsize=(12, 5))
+
+    # Plot the original distribution.
+    plt.subplot(1, 2, 1)
+    plt.bar(counts_original.index, counts_original.values, tick_label=["Ozone=0", "Ozone=1"])
+    plt.title("Original Class Distribution")
+    plt.xlabel("Ozone Class")
+    plt.ylabel("Count")
+
+    # Plot the balanced distribution.
+    plt.subplot(1, 2, 2)
+    plt.bar(counts_balanced.index, counts_balanced.values, tick_label=["Ozone=0", "Ozone=1"])
+    plt.title("Balanced Class Distribution")
+    plt.xlabel("Ozone Class")
+    plt.ylabel("Count")
+
+    plt.tight_layout()
+    plt.show()
+
+    return df
+
 
 def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     new_rows = []
-    samples_per_slice = CONFIG["CHUNK_SIZE"] * 60
 
     for idx, row in df.iterrows():
         new_row = {
@@ -329,7 +474,7 @@ def split_chunks_in_columns(df: pd.DataFrame) -> pd.DataFrame:
             'channel': row["channel"],
             'ozone': row["ozone"]
         }
-        new_row.update({f'val_{i}': row["chunk"][i] for i in range(samples_per_slice)})
+        new_row.update({f'val_{i}': row["chunk"][i] for i in range(len(row["chunk"]))})
         new_rows.append(new_row)
 
     return pd.DataFrame(new_rows)
@@ -508,8 +653,8 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
 
-    #plot_basic_data(df_phyto, df_times, False)
-    #plot_basic_data(df_phyto, df_times, True)
+    plot_basic_data(df_phyto, df_times, False)
+    plot_basic_data(df_phyto, df_times, True)
 
     if normalization == "min-max":
         min_max_normalization(df_phyto, "differential_potential_pn1")
@@ -527,11 +672,12 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
     if normalization == "z-score-chunk":
         z_score_important_data(df_important_data)
 
-    #plot_extracted_data(df_important_data)
-    #plot_extracted_data_stats(df_important_data)
+    plot_extracted_data(df_important_data)
+    plot_extracted_data_stats(df_important_data)
 
     # split data in 10min chunks
-    df_training_split = split_data_in_Xmin_chunks(df_important_data)
+    #df_training_split = split_data_in_Xmin_chunks(df_important_data)
+    df_training_split = split_data_in_rolling_10min_chunks(df_important_data)
     print(df_training_split.describe())
 
     if normalization == "z-score":
