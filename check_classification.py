@@ -212,13 +212,11 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     
     plant_id=999
     #------------------Prepare Data for Plot---------------------------------------#
-    window_size = 100 # 100 = 10min
+    window_size = 10 # 100 = 10min
     df_classified['LastVoltageCh0'] = df_classified['input_normalized_ch0'].apply(lambda x: x[-1])
     df_classified['LastVoltageCh1'] = df_classified['input_normalized_ch1'].apply(lambda x: x[-1])
     df_classified["LastVoltageCh0"] = df_classified["LastVoltageCh0"].rolling(window=window_size, min_periods=1).mean()
     df_classified["LastVoltageCh1"] = df_classified["LastVoltageCh1"].rolling(window=window_size, min_periods=1).mean()
-
-    df_ozone['datetime'] = df_ozone['datetime'] + pd.Timedelta(minutes=10)
 
     fig_width = 5.90666  # Width in inches
     aspect_ratio = 0.618  # Example aspect ratio (height/width)
