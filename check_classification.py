@@ -32,7 +32,7 @@ CONFIG = {
     "RESAMPLE_RATE": "1s",
     "MIN_VALUE": -0.2,
     "MAX_VALUE": 0.2,
-    "AFTER": 20, # minutes after stimulus
+    "AFTER": 30, # minutes after stimulus
 }
 
 # Initialize the console
@@ -90,6 +90,29 @@ def z_score(arr: np.ndarray, factor: float = 1.0, mean_val: Optional[float] = No
     
     return ((arr - mean_val) / std_val) * factor
 
+def adjusted_min_max(data_slice: np.ndarray, factor: float = 1.0) -> np.ndarray:
+    """
+    Apply Min-Max normalization to a given data slice.
+
+    The normalization transforms the data into the range [0, factor].
+
+    Args:
+        data_slice (np.ndarray): The input array to normalize.
+        factor (float): Scaling factor to adjust the normalized values (default is 1.0).
+
+    Returns:
+        np.ndarray: The min-max normalized array.
+    """
+    min_val = -0.2
+    max_val = +0.2
+    range_val = (max_val/factor) - (min_val/factor)
+
+    if range_val == 0:
+        return np.zeros_like(data_slice)  # Avoid division by zero if all values are the same
+
+    normalized = (data_slice - (min_val/factor)) / range_val
+    return normalized
+
 def normalize_input(df: pd.DataFrame, normalization: str) -> pd.DataFrame:
     # Convert stringified lists to numpy arrays
     df['VoltagesCh0'] = df['VoltagesCh0NotScaled'].apply(lambda x: np.array(eval(x)))
@@ -98,6 +121,10 @@ def normalize_input(df: pd.DataFrame, normalization: str) -> pd.DataFrame:
     if normalization == "z-score":
         df['input_normalized_ch0'] = df['VoltagesCh0'].apply(lambda x: z_score(x,1000))
         df['input_normalized_ch1'] = df['VoltagesCh1'].apply(lambda x: z_score(x,1000))
+
+    if normalization == "adjusted-min-max":
+        df['input_normalized_ch0'] = df['VoltagesCh0'].apply(lambda x: adjusted_min_max(x,1000))
+        df['input_normalized_ch1'] = df['VoltagesCh1'].apply(lambda x: adjusted_min_max(x,1000))
 
      # Drop unnecessary columns
     df.drop(columns=['VoltagesCh0NotScaled', 'VoltagesCh1NotScaled'], inplace=True)
@@ -111,13 +138,13 @@ def extract_classification(df: pd.DataFrame) -> pd.DataFrame:
 
     # Extract values from Ch0
     df['classification_ch0_idle'] = df['Ch0'].apply(lambda x: x[0])
-    df['classification_ch0_heat'] = df['Ch0'].apply(lambda x: x[1])
-    df['classification_ch0_ozone'] = df['Ch0'].apply(lambda x: x[2])
+    #df['classification_ch0_heat'] = df['Ch0'].apply(lambda x: x[1])
+    df['classification_ch0_ozone'] = df['Ch0'].apply(lambda x: x[1])
 
     # Extract values from Ch1
     df['classification_ch1_idle'] = df['Ch1'].apply(lambda x: x[0])
-    df['classification_ch1_heat'] = df['Ch1'].apply(lambda x: x[1])
-    df['classification_ch1_ozone'] = df['Ch1'].apply(lambda x: x[2])
+    #df['classification_ch1_heat'] = df['Ch1'].apply(lambda x: x[1])
+    df['classification_ch1_ozone'] = df['Ch1'].apply(lambda x: x[1])
 
     # Drop unnecessary columns
     df.drop(columns=['Ch0', 'Ch1', 'ClassificationCh0', 'ClassificationCh1'], inplace=True)
@@ -128,18 +155,18 @@ def smooth_classification(df: pd.DataFrame, window_size: int) -> pd.DataFrame:
 
 
     df["ch0_smoothed_idle"] = df["classification_ch0_idle"].rolling(window=window_size, min_periods=1).mean()
-    df["ch0_smoothed_heat"] = df["classification_ch0_heat"].rolling(window=window_size, min_periods=1).mean()
+    #df["ch0_smoothed_heat"] = df["classification_ch0_heat"].rolling(window=window_size, min_periods=1).mean()
     df["ch0_smoothed_ozone"] = df["classification_ch0_ozone"].rolling(window=window_size, min_periods=1).mean()
     df["ch1_smoothed_idle"] = df["classification_ch1_idle"].rolling(window=window_size, min_periods=1).mean()
-    df["ch1_smoothed_heat"] = df["classification_ch1_heat"].rolling(window=window_size, min_periods=1).mean()
+    #df["ch1_smoothed_heat"] = df["classification_ch1_heat"].rolling(window=window_size, min_periods=1).mean()
     df["ch1_smoothed_ozone"] = df["classification_ch1_ozone"].rolling(window=window_size, min_periods=1).mean()
 
     df.drop(columns=[
         'classification_ch0_idle',
-        'classification_ch0_heat',
+        #'classification_ch0_heat',
         'classification_ch0_ozone',
         'classification_ch1_idle',
-        'classification_ch1_heat',
+        #'classification_ch1_heat',
         'classification_ch1_ozone'], inplace=True)
 
     return df
@@ -181,7 +208,7 @@ def make_ready_for_classification(df: pd.DataFrame, data_dir):
     df.to_csv(final_path, index=True)
 
 
-def plot_data(df_classified: pd.DataFrame, threshold: float) -> None:
+def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: float) -> None:
     
     plant_id=999
     #------------------Prepare Data for Plot---------------------------------------#
@@ -190,12 +217,15 @@ def plot_data(df_classified: pd.DataFrame, threshold: float) -> None:
     df_classified['LastVoltageCh1'] = df_classified['input_normalized_ch1'].apply(lambda x: x[-1])
     df_classified["LastVoltageCh0"] = df_classified["LastVoltageCh0"].rolling(window=window_size, min_periods=1).mean()
     df_classified["LastVoltageCh1"] = df_classified["LastVoltageCh1"].rolling(window=window_size, min_periods=1).mean()
+
+    df_ozone['datetime'] = df_ozone['datetime'] + pd.Timedelta(minutes=10)
+
     fig_width = 5.90666  # Width in inches
     aspect_ratio = 0.618  # Example aspect ratio (height/width)
     fig_height = fig_width * aspect_ratio
 
 
-    fig, axs = plt.subplots(2, 1, figsize=(fig_width, 8), sharex=True)
+    fig, axs = plt.subplots(3, 1, figsize=(fig_width, 8), sharex=True)
 
     time_fmt = mdates.DateFormatter('%H:%M')
 
@@ -206,15 +236,15 @@ def plot_data(df_classified: pd.DataFrame, threshold: float) -> None:
         plt.setp(ax.get_xticklabels(), fontsize=10, rotation=0, ha='center')
 
 
-    df_classified["smoothed_heat_mean"] = (df_classified["ch0_smoothed_heat"] + df_classified["ch1_smoothed_heat"])/2
+    #df_classified["smoothed_heat_mean"] = (df_classified["ch0_smoothed_heat"] + df_classified["ch1_smoothed_heat"])/2
     df_classified["smoothed_ozone_mean"] = (df_classified["ch0_smoothed_ozone"] + df_classified["ch1_smoothed_ozone"])/2
     df_classified["smoothed_idle_mean"] = (df_classified["ch0_smoothed_idle"] + df_classified["ch1_smoothed_idle"])/2
 
     # CH0: blues
     #axs[0].plot(df_classified['datetime'], df_classified["ch0_smoothed_idle"], label="Idle CH0", color="#add8e6")   # lightblue
-    axs[0].plot(df_classified['datetime'], df_classified["smoothed_heat_mean"], label="Heat CH0", color="#FF0000")  # matplotlib default blue
-    axs[0].plot(df_classified['datetime'], df_classified["smoothed_ozone_mean"], label="Ozone CH0", color="#007BFF") # darkblue
-    axs[0].plot(df_classified['datetime'], df_classified["smoothed_idle_mean"], label="Ozone CH0", color="#012169")
+   # axs[0].plot(df_classified['datetime'], df_classified["smoothed_heat_mean"], label="Heat CH0", color="#FF0000")  # matplotlib default blue
+    axs[0].plot(df_classified['datetime'], df_classified["ch0_smoothed_ozone"], label="Ozone CH0", color="#007BFF") # darkblue
+    axs[0].plot(df_classified['datetime'], df_classified["ch1_smoothed_ozone"], label="Ozone CH1", color="#012169")
 
     # CH1: oranges
     #axs[0].plot(df_classified['datetime'], df_classified["ch1_smoothed_idle"], label="Idle CH1", color="#ffdab9")   # peachpuff (light orange)
@@ -228,7 +258,7 @@ def plot_data(df_classified: pd.DataFrame, threshold: float) -> None:
    
 
     axs[0].fill_between(df_classified['datetime'], 0, 1.0, 
-                    where=(df_classified["smoothed_ozone_mean"] > threshold),# & (df_classified["ch1_smoothed_heat"] > threshold), 
+                    where=(df_classified["ch0_smoothed_ozone"] > threshold),# & (df_classified["ch1_smoothed_heat"] > threshold), 
                     color='#000080', alpha=0.3, label="Stimulus prediction")
     
     axs[0].fill_between(
@@ -257,6 +287,11 @@ def plot_data(df_classified: pd.DataFrame, threshold: float) -> None:
     axs[1].set_ylabel("EDP [scaled]",fontsize=10)
     #axs[1].set_title(f"Normalized CNN Input via {normalization}",fontsize=10)
     axs[1].legend(fontsize=8, loc="lower right")
+
+    axs[2].plot(df_ozone['datetime'], df_ozone['O3_2'], marker='o')
+    axs[2].set_ylabel('O3 [ppb]')
+    axs[2].set_title('O3_2 over Time')
+    axs[2].grid(True)
 
     # Improve spacing to prevent label cutoff
     fig.tight_layout()
@@ -309,7 +344,7 @@ def main():
     df_ozone = df_ozone.sort_values(by="datetime").reset_index(drop=True)
     df_ozone = cut_data(df_ozone, from_date, until_date)
 
-    #plot_o3(df_ozone)
+    plot_o3(df_ozone)
 
     times_files = discover_files(data_dir, "times")
     df_times = load_times(times_files[0])
@@ -327,11 +362,11 @@ def main():
     # 
     df_classified = extract_classification(df_classified)
     df_classified = normalize_input(df_classified, normalization)
-    df_classified = smooth_classification(df_classified, 100)
+    df_classified = smooth_classification(df_classified, 10)
 
     df_classified = label_ground_truth(df_classified, df_times)
 
-    plot_data(df_classified, threshold)
+    plot_data(df_classified, df_ozone, threshold)
 
 
 
