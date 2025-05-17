@@ -210,7 +210,7 @@ def make_ready_for_classification(df: pd.DataFrame, data_dir):
 
 def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: float) -> None:
     
-    plant_id=999
+    plant_id=3
     #------------------Prepare Data for Plot---------------------------------------#
     window_size = 10 # 100 = 10min
     df_classified['LastVoltageCh0'] = df_classified['input_normalized_ch0'].apply(lambda x: x[-1])
@@ -238,19 +238,30 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     df_classified["smoothed_ozone_mean"] = (df_classified["ch0_smoothed_ozone"] + df_classified["ch1_smoothed_ozone"])/2
     df_classified["smoothed_idle_mean"] = (df_classified["ch0_smoothed_idle"] + df_classified["ch1_smoothed_idle"])/2
 
+    df_classified["smoothed_ozone_min"] = (
+    df_classified[["ch0_smoothed_ozone", "ch1_smoothed_ozone"]]
+    .min(axis=1))
+
+    axs[0].axhline(y=threshold, color="black", linestyle="--", linewidth=1, label=f"Threshold: {threshold}")
+
+    axs[0].fill_between(
+        df_classified['datetime'], 0, 1.0, 
+        where=(df_classified["ground_truth"] == 1), 
+        color='#4169E1', alpha=0.3, label="Stimulus application"
+    )
+
     # CH0: blues
     #axs[0].plot(df_classified['datetime'], df_classified["ch0_smoothed_idle"], label="Idle CH0", color="#add8e6")   # lightblue
    # axs[0].plot(df_classified['datetime'], df_classified["smoothed_heat_mean"], label="Heat CH0", color="#FF0000")  # matplotlib default blue
-    axs[0].plot(df_classified['datetime'], df_classified["ch0_smoothed_ozone"], label="Ozone CH0", color="#007BFF") # darkblue
-    axs[0].plot(df_classified['datetime'], df_classified["ch1_smoothed_ozone"], label="Ozone CH1", color="#012169")
+    #axs[0].plot(df_classified['datetime'], df_classified["ch0_smoothed_ozone"], label="Ozone CH0", color="#007BFF") # darkblue
+    #axs[0].plot(df_classified['datetime'], df_classified["ch1_smoothed_ozone"], label="Ozone CH1", color="#012169")
+    axs[0].plot(df_classified['datetime'], df_classified["smoothed_ozone_min"], label="Min of CH0 and CH1 Classification", color="#004EB4") 
 
     # CH1: oranges
     #axs[0].plot(df_classified['datetime'], df_classified["ch1_smoothed_idle"], label="Idle CH1", color="#ffdab9")   # peachpuff (light orange)
     # axs[0].plot(df_classified['datetime'], df_classified["ch1_smoothed_heat_mean"], label="Heat CH1", color="#8B0000")   # matplotlib default orange
     # axs[0].plot(df_classified['datetime'], df_classified["ch1_smoothed_ozone"], label="Ozone CH1", color="#00008B") # dark orange/brown
 
-
-    axs[0].axhline(y=threshold, color="red", linestyle="--", linewidth=1, label=f"Threshold: {threshold}")
 
 
    
@@ -259,11 +270,7 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
                     where=(df_classified["ch0_smoothed_ozone"] > threshold),# & (df_classified["ch1_smoothed_heat"] > threshold), 
                     color='#000080', alpha=0.3, label="Stimulus prediction")
     
-    axs[0].fill_between(
-        df_classified['datetime'], 0, 1.0, 
-        where=(df_classified["ground_truth"] == 1), 
-        color='#4169E1', alpha=0.3, label="Stimulus application"
-    )
+
 
 
     # Ensure y-axis limits and set explicit tick marks
@@ -272,33 +279,34 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     axs[0].set_ylabel("Phase Probability",fontsize=10)
     axs[0].tick_params(axis='y', labelsize=10) 
 
-    axs[0].set_title(f"Online Heat Phase Classification Using Ivy Data (ID {plant_id})", fontsize=10, pad=40)
-    axs[0].legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, 1.25), ncol=3, framealpha=0.7)
+    axs[0].set_title(f"Online Ozone Phase Classification with PhytoNodeClassifier (Plant ID: {plant_id})", fontsize=10, pad=40)
+    axs[0].legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, 1.25), ncol=2, framealpha=0.7)
 
 
     #Line plot for interpolated electric potential
+    #axs[1].set_title(f"Feature-Scaled FCN Input via Adjusted-Min-Max Normalization", fontsize=10, pad=40)
     axs[1].plot(df_classified['datetime'], df_classified['LastVoltageCh0'], label="CH0", color="#90EE90")
     axs[1].plot(df_classified['datetime'], df_classified['LastVoltageCh1'], label="CH1", color="#013220")
 
     # Labels and Titles
     axs[1].tick_params(axis='y', labelsize=10)
     axs[1].set_ylabel("EDP [scaled]",fontsize=10)
-    #axs[1].set_title(f"Normalized CNN Input via {normalization}",fontsize=10)
+    axs[1].set_title("Feature-Scaled FCN Input via Adjusted-Min-Max Normalization",fontsize=10)
     axs[1].legend(fontsize=8, loc="lower right")
 
-    axs[2].plot(df_ozone['datetime'], df_ozone['O3_2'], marker='o')
-    axs[2].set_ylabel('O3 [ppb]')
-    axs[2].set_title('O3_2 over Time')
+    axs[2].plot(df_ozone['datetime'], df_ozone['O3_2'])
+    axs[2].set_ylabel('O3 [ppb]', fontsize=10)
+    axs[2].set_title('Ozone Data', fontsize=10)
     axs[2].grid(True)
 
     # Improve spacing to prevent label cutoff
     fig.tight_layout()
 
     # Save figure in PGF format with proper bounding box
-    #plt.savefig(f"minMaxOnlineClassificationAdjusted{plant_id}Shifted.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
+    plt.savefig(f"Ozone.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
     #plot_path = os.path.join(save_dir, f"{prefix}_classified_plot.png")
     #plt.savefig(plot_path, dpi=300)
-    plt.show()
+    #plt.show()
 
 def plot_o3(df):
     df['datetime'] = pd.to_datetime(df['datetime'])  # Ensure datetime is parsed
