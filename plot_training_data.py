@@ -128,7 +128,7 @@ if __name__ == "__main__":
     #plt.colorbar(hb)
     plt.tight_layout()
     #plt.show()
-    plt.savefig("heatMapAMMOzone.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
+    plt.savefig("heatMapMMOzone.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
 
     
     # # Create subplots for CH1 and CH2
