@@ -208,6 +208,33 @@ def make_ready_for_classification(df: pd.DataFrame, data_dir):
     df.to_csv(final_path, index=True)
 
 
+def calculate_confusion_matrix(df: pd.DataFrame, threshold: float):
+    """
+    Calculate TP, FP, TN, FN for:
+      • ground truth: df['ground_truth'] == 1
+      • prediction : df['ch0_smoothed_ozone'] > threshold
+
+    Returns:
+        dict with keys 'TP', 'FP', 'TN', 'FN'
+    """
+    # boolean masks
+    y_true = df['ground_truth'] == 1
+    y_pred =  (df[["ch0_smoothed_ozone", "ch1_smoothed_ozone"]].mean(axis=1)) > threshold
+
+    # manual computation
+    TP = int(np.sum( y_true &  y_pred))
+    TN = int(np.sum(~y_true & ~y_pred))
+    FP = int(np.sum(~y_true &  y_pred))
+    FN = int(np.sum( y_true & ~y_pred))
+
+    print(f"TP (True Positives):  {TP}")
+    print(f"FP (False Positives): {FP}")
+    print(f"TN (True Negatives):  {TN}")
+    print(f"FN (False Negatives): {FN}")
+
+    return {'TP': TP, 'FP': FP, 'TN': TN, 'FN': FN}
+
+
 def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: float) -> None:
     
     plant_id=3
@@ -303,10 +330,10 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     fig.tight_layout()
 
     # Save figure in PGF format with proper bounding box
-    plt.savefig(f"Ozone.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
+    #plt.savefig(f"Ozone.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
     #plot_path = os.path.join(save_dir, f"{prefix}_classified_plot.png")
     #plt.savefig(plot_path, dpi=300)
-    #plt.show()
+    plt.show()
 
 def plot_o3(df):
     df['datetime'] = pd.to_datetime(df['datetime'])  # Ensure datetime is parsed
@@ -373,6 +400,8 @@ def main():
     df_classified = label_ground_truth(df_classified, df_times)
 
     plot_data(df_classified, df_ozone, threshold)
+
+    calculate_confusion_matrix(df_classified, threshold)
 
 
 
