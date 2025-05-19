@@ -26,8 +26,8 @@ CONFIG = {
     "MIN_VALUE": -200,
     "MAX_VALUE": 200,
     "FACTOR": 1000, # not get numerical differention
-    "BEFORE": 60, # minutes before stimulus
-    "AFTER": 60, # minutes after stimulus
+    "BEFORE": 30, # minutes before stimulus
+    "AFTER": 30, # minutes after stimulus
     "CHUNK_SIZE": 30 ,#min
     "GROUP_SIZE": 18 # 18s merged
 }
@@ -164,7 +164,7 @@ def z_score_chunk(df: pd.DataFrame) -> None:
     df["chunk"] = df["chunk"].apply(zs)
 
 
-def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> pd.DataFrame:
+def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, data_dir) -> pd.DataFrame:
     """
     Important data equals x min before and x min after stimulus
     """
@@ -190,6 +190,9 @@ def extract_important_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, ) -> 
             })
         
     result_df = pd.DataFrame(rows)
+
+    file_path = os.path.join(data_dir, "important_data.csv")
+    result_df.to_csv(file_path, index=False)  
     
     return result_df
 
@@ -665,7 +668,7 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
         adjusted_min_max_normalization(df_phyto, "differential_potential_pn1")
         adjusted_min_max_normalization(df_phyto, "differential_potential_pn3")
 
-    df_important_data = extract_important_data(df_phyto, df_times)
+    df_important_data = extract_important_data(df_phyto, df_times, data_dir)
     
     if normalization == "min-max-chunk":
         min_max_important_data(df_important_data)

@@ -292,7 +292,7 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     axs[1].tick_params(axis='y', labelsize=10)
     axs[1].set_ylabel("EDP [scaled]",fontsize=10)
     axs[1].set_title("Feature-Scaled FCN Input via Adjusted-Min-Max Normalization",fontsize=10)
-    axs[1].legend(fontsize=8, loc="lower right")
+    axs[1].legend(fontsize=8, loc="center right")
 
     axs[2].plot(df_ozone['datetime'], df_ozone['O3_2'])
     axs[2].set_ylabel('O3 [ppb]', fontsize=10)

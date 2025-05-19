@@ -68,3 +68,7 @@ python3 preprocess.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut
 ```bash
 python3 check_classification.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut/Exp48_Ivy525 --prefix C1 --from-date "2025-03-29 14:45" --until-date "2025-03-30 22:00" --threshold 0.33 --normalization z-score
 ```
+
+```bash
+python3 check_classification.py --data-dir /home/chris/experiment_data/ozone_cut/ozone_cut/Exp49_Ivy525 --prefix C1 --from-date "2025-04-13 09:00" --until-date "2025-04-13 20:00" --threshold 0.5 --normalization adjusted-min-max
+```

@@ -11,12 +11,12 @@ DATA_DIRS=(
 
 # Define an array of normalization options (empty string for no normalization)
 NORMALIZATIONS=(
-    ""
-    "min-max"
+    # ""
+    # "min-max"
     "adjusted-min-max"
-    "min-max-chunk"
-    "z-score-chunk"
-    "z-score"
+    # "min-max-chunk"
+    # "z-score-chunk"
+    # "z-score"
 )
 
 # Loop over each data directory
