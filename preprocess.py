@@ -119,6 +119,12 @@ def adjusted_min_max_normalization(df: pd.DataFrame, column: str) -> None:
         (CONFIG["MAX_VALUE"]/CONFIG["FACTOR"]) - (CONFIG["MIN_VALUE"]/CONFIG["FACTOR"]))
     
 
+
+def none_1000(df: pd.DataFrame, column: str) -> None:
+
+    df[column] = df[column] *1000
+
+
 def min_max_important_data(df: pd.DataFrame) -> None:
     columns = ["differential_potential_pn1", "differential_potential_pn3"]
     
@@ -668,6 +674,10 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
         adjusted_min_max_normalization(df_phyto, "differential_potential_pn1")
         adjusted_min_max_normalization(df_phyto, "differential_potential_pn3")
 
+    if normalization == "none_1000":
+        none_1000(df_phyto, "differential_potential_pn1")
+        none_1000(df_phyto, "differential_potential_pn3")
+
     df_important_data = extract_important_data(df_phyto, df_times, data_dir)
     
     if normalization == "min-max-chunk":
@@ -726,7 +736,7 @@ def main():
         required=False,
         type=str,
         default=None,
-        choices=["min-max", "adjusted-min-max", "min-max-chunk", "z-score-chunk", "z-score"],
+        choices=["min-max", "adjusted-min-max", "min-max-chunk", "z-score-chunk", "z-score", "none-1000"],
         help="Normalization method to apply. Options: min-max, adjusted-min-max, min-max-chunk, z-score-chunk, or z-score."
     )
     parser.add_argument("--create-simulation-files", required=False, type=bool, default=False, help="Create Simulation Files")
