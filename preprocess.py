@@ -28,8 +28,8 @@ CONFIG = {
     "FACTOR": 1000, # not get numerical differention
     "BEFORE": 30, # minutes before stimulus
     "AFTER": 30, # minutes after stimulus
-    "CHUNK_SIZE": 30 ,#min
-    "GROUP_SIZE": 18 # 18s merged
+    "CHUNK_SIZE": 10 ,#min
+    "GROUP_SIZE": 6 # 18s merged
 }
 
 # Initialize the console
@@ -674,7 +674,7 @@ def preprocess(data_dir: str, normalization: str, resample_rate: str):
         adjusted_min_max_normalization(df_phyto, "differential_potential_pn1")
         adjusted_min_max_normalization(df_phyto, "differential_potential_pn3")
 
-    if normalization == "none_1000":
+    if normalization == "none-1000":
         none_1000(df_phyto, "differential_potential_pn1")
         none_1000(df_phyto, "differential_potential_pn3")
 
