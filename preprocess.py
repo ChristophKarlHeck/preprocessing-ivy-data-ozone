@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import glob
 import argparse
 from scipy.stats import mode
+import matplotlib.dates as mdates
 
 from typing import Optional
 
@@ -527,27 +528,40 @@ def plot_final(df: pd.DataFrame) -> None:
 
 def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulus_window: bool) -> None:
 
+
+    fig_width = 5.90666  # Width in inches
+    aspect_ratio = 0.618  # Example aspect ratio (height/width)
+    fig_height = fig_width * aspect_ratio
+
+
     # Create subplots
-    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 8), sharex=True)
+    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(fig_width, 6), sharex=True)
 
     # Plot each column in a separate subplot
     # relevant sind differential_potential_pn1 (leaf), differnetial_potential_pn3 (stem), O3_1 und O3_2 die zwei ozon
     # sensoren (aber ich weiß nicht welcher oben und welcher unten ist)
     plot_info = [
-        {"col": "differential_potential_pn1", "title": "Differential Potential Leaf", "ylabel": "[mv]"},
-        {"col": "differential_potential_pn3", "title": "Differential Potential Stem", "ylabel": "[mv]"},
-        {"col": "O3_1", "title": "O3_1", "ylabel": "[ppb]"},
-        {"col": "O3_2", "title": "O3_2", "ylabel": "[ppb]"}
+        {"col": "differential_potential_pn1", "label": "CH0 Resampled" ,"title": "CH0 Resampled", "ylabel": "Voltage [mv]", "color": "#6aaed6"},
+        {"col": "differential_potential_pn3", "label": "CH1 Resampled" ,"title": "CH1 Resampled", "ylabel": "Voltage [mv]", "color": "#1764ab"},
+        {"col": "O3_1", "label": "Ozone Level" ,"title": "O3_1", "ylabel": r'O$_3$ [ppb]', "color": '#1f77b4'},
+        #{"col": "O3_2", "title": "O3_2", "ylabel": "Ozone [ppb]"}
 ]
 
     for i, info in enumerate(plot_info):
         ax = axes[i]
         # Plot the data using the details from plot_info
-        ax.plot(df_phyto["datetime"], df_phyto[info["col"]], label=info["col"], linewidth=1)
-        ax.set_title(info["title"])
+        ax.plot(df_phyto["datetime"], df_phyto[info["col"]], label=info["label"], linewidth=1, color=info["color"])
+        #ax.set_title(info["title"])
         ax.grid(True)
         ax.set_ylabel(info["ylabel"])
         ax.legend()
+
+        ax.xaxis.set_major_locator(
+        mdates.HourLocator(byhour=range(0,24,6))
+        )
+        ax.xaxis.set_major_formatter(
+        mdates.DateFormatter("%H:%M")
+        )
 
         # Loop through each event in df_times to mark the area around each event
         if mark_stimulus_window:
@@ -558,11 +572,11 @@ def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulu
                                 color='blue', alpha=0.2)
 
     # Set common x-label
-    plt.xlabel("Datetime")
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=0)
 
     # Adjust layout for better spacing
     plt.tight_layout()
+    plt.savefig(f"OzoneRaw.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
     plt.show()
 
 

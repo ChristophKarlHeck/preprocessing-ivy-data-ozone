@@ -123,8 +123,8 @@ def normalize_input(df: pd.DataFrame, normalization: str) -> pd.DataFrame:
         df['input_normalized_ch1'] = df['VoltagesCh1'].apply(lambda x: z_score(x,1000))
 
     if normalization == "adjusted-min-max":
-        df['input_normalized_ch0'] = df['VoltagesCh0'].apply(lambda x: adjusted_min_max(x,1000))
-        df['input_normalized_ch1'] = df['VoltagesCh1'].apply(lambda x: adjusted_min_max(x,1000))
+        df['input_normalized_ch0'] = df['VoltagesCh0'].apply(lambda x: adjusted_min_max(x,1))
+        df['input_normalized_ch1'] = df['VoltagesCh1'].apply(lambda x: adjusted_min_max(x,1))
 
      # Drop unnecessary columns
     df.drop(columns=['VoltagesCh0NotScaled', 'VoltagesCh1NotScaled'], inplace=True)
@@ -295,7 +295,7 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
 
     axs[0].fill_between(df_classified['datetime'], 0, 1.0, 
                     where=(df_classified["ch0_smoothed_ozone"] > threshold),# & (df_classified["ch1_smoothed_heat"] > threshold), 
-                    color='#000080', alpha=0.3, label="Stimulus prediction")
+                    color='#000080', alpha=0.3, label="Stimulus classification")
     
 
 
@@ -303,10 +303,10 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     # Ensure y-axis limits and set explicit tick marks
     axs[0].set_ylim(0, 1.05)
     axs[0].set_yticks([0, 0.25, 0.5, 0.75, 1])  # Explicitly set y-ticks
-    axs[0].set_ylabel("Phase Probability",fontsize=10)
+    axs[0].set_ylabel("Ozone Stimulus Probability",fontsize=10)
     axs[0].tick_params(axis='y', labelsize=10) 
 
-    axs[0].set_title(f"Online Ozone Phase Classification with PhytoNodeClassifier (Plant ID: {plant_id})", fontsize=10, pad=40)
+    axs[0].set_title(f"Online Ozone Phase Classification with PhytoNodeClassifier (Plant ID: 4)", fontsize=10, pad=40)
     axs[0].legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, 1.25), ncol=2, framealpha=0.7)
 
 
@@ -322,7 +322,7 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     axs[1].legend(fontsize=8, loc="center right")
 
     axs[2].plot(df_ozone['datetime'], df_ozone['O3_2'])
-    axs[2].set_ylabel('O3 [ppb]', fontsize=10)
+    axs[2].set_ylabel(r'O$_3$ [ppb]', fontsize=10)
     axs[2].set_title('Ozone Data', fontsize=10)
     axs[2].grid(True)
 
@@ -330,10 +330,10 @@ def plot_data(df_classified: pd.DataFrame, df_ozone: pd.DataFrame, threshold: fl
     fig.tight_layout()
 
     # Save figure in PGF format with proper bounding box
-    #plt.savefig(f"Ozone.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
+    plt.savefig(f"Ozone.pgf", format="pgf", bbox_inches="tight", pad_inches=0.05)
     #plot_path = os.path.join(save_dir, f"{prefix}_classified_plot.png")
     #plt.savefig(plot_path, dpi=300)
-    plt.show()
+    #plt.show()
 
 def plot_o3(df):
     df['datetime'] = pd.to_datetime(df['datetime'])  # Ensure datetime is parsed
