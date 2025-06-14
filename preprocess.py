@@ -537,13 +537,15 @@ def plot_basic_data(df_phyto: pd.DataFrame, df_times: pd.DataFrame, mark_stimulu
     # Create subplots
     fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(fig_width, 6), sharex=True)
 
+    df_phyto["O3_avg"] = df_phyto[["O3_1", "O3_2"]].mean(axis=1)
+
     # Plot each column in a separate subplot
     # relevant sind differential_potential_pn1 (leaf), differnetial_potential_pn3 (stem), O3_1 und O3_2 die zwei ozon
     # sensoren (aber ich weiß nicht welcher oben und welcher unten ist)
     plot_info = [
         {"col": "differential_potential_pn1", "label": "CH0 Resampled" ,"title": "CH0 Resampled", "ylabel": "Voltage [mv]", "color": "#6aaed6"},
         {"col": "differential_potential_pn3", "label": "CH1 Resampled" ,"title": "CH1 Resampled", "ylabel": "Voltage [mv]", "color": "#1764ab"},
-        {"col": "O3_1", "label": "Ozone Level" ,"title": "O3_1", "ylabel": r'O$_3$ [ppb]', "color": '#1f77b4'},
+        {"col": "O3_avg", "label": "Avg Ozone Level" ,"title": "O3_1", "ylabel": r'O$_3$ [ppb]', "color": '#1f77b4'},
         #{"col": "O3_2", "title": "O3_2", "ylabel": "Ozone [ppb]"}
 ]
 
